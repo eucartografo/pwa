@@ -9,7 +9,7 @@ const CONFIG = {
 
   // 2. ID da Planilha Google Sheets
   //    É o trecho longo da URL: docs.google.com/spreadsheets/d/ESTE_TRECHO/edit
-  SPREADSHEET_ID: 'SEU_SPREADSHEET_ID_AQUI',
+    SPREADSHEET_ID: '1tg2ZpnqXGh-ztA49zVjEw-ILPuSjoqjgqjgGMn5wrgc',
 
   // 3. E-mails autorizados (só esses conseguem fazer login)
   ALLOWED_EMAILS: [
