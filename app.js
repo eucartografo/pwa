@@ -8,13 +8,14 @@ const App = (() => {
   let _token = null;
 
   const PAGE_TITLES = {
-    painel: 'Painel', contas: 'Contas', receitas: 'Receitas',
-    despesas: 'Despesas', orcamento: 'Orçamento', cartao: 'Cartão',
-    dividas: 'Dívidas', metas: 'Metas',
+    painel: 'Painel', saude: 'Saúde Financeira', contas: 'Contas',
+    receitas: 'Receitas', despesas: 'Despesas', orcamento: 'Orçamento',
+    cartao: 'Cartão', dividas: 'Dívidas', metas: 'Metas', relatorio: 'Relatório Mensal',
   };
 
   const PAGE_RENDERERS = {
     painel:    Pages.renderPainel,
+    saude:     Pages.renderSaude,
     contas:    Pages.renderContas,
     receitas:  Pages.renderReceitas,
     despesas:  Pages.renderDespesas,
@@ -22,6 +23,7 @@ const App = (() => {
     cartao:    Pages.renderCartao,
     dividas:   Pages.renderDividas,
     metas:     Pages.renderMetas,
+    relatorio: Pages.renderRelatorio,
   };
 
   // ── Navegação ─────────────────────────────────────────
