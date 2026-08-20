@@ -6,6 +6,11 @@ const App = (() => {
 
   let _currentPage = 'painel';
   let _token = null;
+  let _tokenClient = null;
+  let _tokenExpiry = 0;       // timestamp de expiração do access token
+  let _userPayload = null;    // dados do usuário logado
+
+  const STORAGE_KEY = 'familia_user'; // chave no localStorage
 
   const PAGE_TITLES = {
     painel: 'Painel', saude: 'Saúde Financeira', contas: 'Contas',
@@ -30,7 +35,6 @@ const App = (() => {
   function navigateTo(page) {
     if (page === _currentPage) return;
 
-    // Atualiza estado visual
     document.querySelectorAll('.nav-item, .bn-item').forEach(el => {
       el.classList.toggle('active', el.dataset.page === page);
     });
@@ -43,24 +47,38 @@ const App = (() => {
     loadPage(page);
   }
 
-  function loadPage(page) {
+  async function loadPage(page) {
+    // Renova token se estiver perto de expirar (menos de 5 min)
+    if (_token && Date.now() > _tokenExpiry - 5 * 60 * 1000) {
+      await refreshTokenSilent();
+    }
     const el = document.getElementById(`page-${page}`);
     const renderer = PAGE_RENDERERS[page];
     if (renderer) renderer(el);
   }
 
+  // ── Token: renovação silenciosa ──────────────────────
+  function refreshTokenSilent() {
+    return new Promise((resolve) => {
+      if (!_tokenClient) { resolve(); return; }
+      // prompt: '' = silencioso, sem popup de confirmação
+      _tokenClient.requestAccessToken({ prompt: '' });
+      // resolve imediatamente; o callback do tokenClient vai atualizar _token
+      setTimeout(resolve, 1000);
+    });
+  }
+
   // ── Autenticação Google ───────────────────────────────
   function initGoogleAuth() {
-    // Aguarda o script GSI carregar
     const tryInit = () => {
-      if (typeof google === 'undefined') {
-        setTimeout(tryInit, 200); return;
-      }
+      if (typeof google === 'undefined') { setTimeout(tryInit, 200); return; }
 
+      // Inicializa o cliente de ID (para o botão "Entrar com Google")
       google.accounts.id.initialize({
         client_id: CONFIG.CLIENT_ID,
         callback: handleCredential,
-        auto_select: true,
+        auto_select: true,          // tenta login automático se já logou antes
+        cancel_on_tap_outside: false,
       });
 
       google.accounts.id.renderButton(
@@ -68,67 +86,124 @@ const App = (() => {
         { theme: 'outline', size: 'large', width: 280, text: 'signin_with', shape: 'pill' }
       );
 
-      // Tenta login automático
-      google.accounts.id.prompt();
+      // Tenta login automático (One Tap)
+      google.accounts.id.prompt((notification) => {
+        // Se o One Tap não funcionar (usuário dispensou antes),
+        // tenta restaurar sessão salva do localStorage
+        if (notification.isSkippedMoment() || notification.isDismissedMoment()) {
+          tryRestoreSession();
+        }
+      });
     };
     tryInit();
   }
 
+  // ── Restaurar sessão salva ────────────────────────────
+  function tryRestoreSession() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (!saved) return;
+      const data = JSON.parse(saved);
+      // Verifica se o e-mail ainda é autorizado
+      if (!CONFIG.ALLOWED_EMAILS.includes(data.email)) {
+        localStorage.removeItem(STORAGE_KEY);
+        return;
+      }
+      // Sessão salva válida — renova o token silenciosamente
+      _userPayload = data;
+      setupTokenClient(data, /* silent= */ true);
+    } catch(e) {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }
+
+  // ── Recebe credencial do botão Google ─────────────────
   function handleCredential(response) {
     const payload = parseJwt(response.credential);
 
-    // Verificar se é um e-mail autorizado
     if (!CONFIG.ALLOWED_EMAILS.includes(payload.email)) {
       alert(`Acesso negado.\n\nEste app é exclusivo da família.\nConta usada: ${payload.email}`);
       return;
     }
 
-    // Obter token de acesso para a Sheets API
-    google.accounts.oauth2.initTokenClient({
-      client_id: CONFIG.CLIENT_ID,
-      scope: 'https://www.googleapis.com/auth/spreadsheets',
-      callback: (tokenResponse) => {
-        _token = tokenResponse.access_token;
-        Sheets.setToken(_token);
-        onLoginSuccess(payload);
-      }
-    }).requestAccessToken();
+    // Salva dados do usuário no localStorage para restaurar sessão
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      email: payload.email,
+      name:  payload.given_name || payload.name || payload.email,
+      picture: payload.picture || '',
+    }));
+
+    _userPayload = payload;
+    setupTokenClient(payload, /* silent= */ false);
   }
 
-  async function onLoginSuccess(payload) {
-    // Atualiza UI do usuário
-    const name = payload.given_name || payload.name || payload.email;
+  // ── Configura o cliente OAuth2 para o Sheets ──────────
+  function setupTokenClient(userInfo, silent) {
+    _tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CONFIG.CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/spreadsheets',
+      hint: userInfo.email,       // pré-seleciona a conta correta
+      callback: (tokenResponse) => {
+        if (tokenResponse.error) {
+          // Token falhou — mostra tela de login
+          showLogin();
+          return;
+        }
+        _token = tokenResponse.access_token;
+        // Tokens do Google duram 1 hora (3600s)
+        _tokenExpiry = Date.now() + (tokenResponse.expires_in || 3600) * 1000;
+        Sheets.setToken(_token);
+
+        // Se já temos os dados do usuário, entra direto
+        if (_userPayload || userInfo) {
+          onLoginSuccess(userInfo);
+        }
+      },
+    });
+
+    // silent = restaurando sessão (sem popup)
+    // !silent = primeiro login (pode mostrar popup de conta)
+    _tokenClient.requestAccessToken({ prompt: silent ? 'none' : '' });
+  }
+
+  // ── Após login bem-sucedido ────────────────────────────
+  async function onLoginSuccess(userInfo) {
+    const name    = userInfo.given_name || userInfo.name || userInfo.email;
+    const picture = userInfo.picture || '';
+
     document.getElementById('user-name').textContent = name;
+    document.getElementById('user-avatar').src = picture;
+    document.getElementById('user-avatar-mobile').src = picture;
 
-    const avatar = payload.picture || '';
-    document.getElementById('user-avatar').src = avatar;
-    document.getElementById('user-avatar-mobile').src = avatar;
-
-    // Mostra o app
     document.getElementById('screen-login').classList.remove('active');
     document.getElementById('screen-app').classList.add('active');
 
-    // Verifica/inicializa a planilha
-    try {
-      await Sheets.initSpreadsheet();
-    } catch (e) {
-      console.warn('initSpreadsheet:', e);
-    }
+    try { await Sheets.initSpreadsheet(); } catch(e) { console.warn(e); }
 
-    // Carrega a página inicial
     loadPage('painel');
 
-    // Auto-refresh a cada 5 minutos
+    // Renova token automaticamente a cada 50 minutos (antes de expirar)
+    setInterval(refreshTokenSilent, 50 * 60 * 1000);
+
+    // Auto-refresh dos dados a cada 5 minutos
     setInterval(() => {
       if (document.visibilityState === 'visible') loadPage(_currentPage);
     }, 5 * 60 * 1000);
   }
 
-  function logout() {
-    google.accounts.id.disableAutoSelect();
-    _token = null;
+  function showLogin() {
     document.getElementById('screen-app').classList.remove('active');
     document.getElementById('screen-login').classList.add('active');
+  }
+
+  // ── Logout ────────────────────────────────────────────
+  function logout() {
+    localStorage.removeItem(STORAGE_KEY);
+    _token = null;
+    _userPayload = null;
+    _tokenExpiry = 0;
+    google.accounts.id.disableAutoSelect();
+    showLogin();
   }
 
   // ── Utils ─────────────────────────────────────────────
@@ -141,43 +216,35 @@ const App = (() => {
   // ── Service Worker (PWA) ──────────────────────────────
   function registerSW() {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').then(r => {
-        console.log('SW registrado:', r.scope);
-      }).catch(e => console.log('SW erro:', e));
+      navigator.serviceWorker.register('sw.js')
+        .then(r => console.log('SW:', r.scope))
+        .catch(e => console.log('SW erro:', e));
     }
   }
 
   // ── Init ──────────────────────────────────────────────
   function init() {
-    // Bind navegação
     document.querySelectorAll('[data-page]').forEach(el => {
       el.addEventListener('click', () => navigateTo(el.dataset.page));
     });
 
-    // Modal close
     document.getElementById('modal-close').addEventListener('click', Pages.closeModal);
     document.getElementById('modal-overlay').addEventListener('click', e => {
       if (e.target === document.getElementById('modal-overlay')) Pages.closeModal();
     });
 
-    // Refresh button
     document.getElementById('btn-refresh').addEventListener('click', () => {
       Pages.toast('Atualizando…');
       loadPage(_currentPage);
     });
 
-    // Logout
     document.getElementById('btn-logout').addEventListener('click', logout);
 
-    // Auth
     initGoogleAuth();
-
-    // PWA
     registerSW();
   }
 
   return { init, navigateTo };
 })();
 
-// Inicia quando o DOM estiver pronto
 document.addEventListener('DOMContentLoaded', App.init);
