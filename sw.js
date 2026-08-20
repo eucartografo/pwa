@@ -1,8 +1,8 @@
 // ══════════════════════════════════════════════════════════
 //  SERVICE WORKER — cache offline para PWA
-// ══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
 
-const CACHE = 'familia-v2';
+const CACHE = 'familia-v3';
 const ASSETS = [
   '/pwa/',
   '/pwa/index.html',
@@ -25,7 +25,7 @@ self.addEventListener('install', e => {
   );
 });
 
-// Ativação: limpa caches antigos
+// Ativação: limpa caches antigos (de versões anteriores do CACHE)
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
@@ -34,17 +34,44 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Fetch: network-first para API do Google, cache-first para assets
+// Fetch:
+//  - API Google: sempre vai para a rede (dados precisam ser frescos)
+//  - App shell (HTML/CSS/JS): network-first — busca a versão mais nova
+//    na rede e só cai para o cache se estiver offline. Isso garante que
+//    atualizações do app.js/index.html/style.css cheguem ao usuário
+//    assim que ele reabrir o app, em vez de ficar preso numa versão
+//    antiga que nunca mais é revalidada.
+//  - Outros assets (ícones, fontes): cache-first, já que raramente mudam.
 self.addEventListener('fetch', e => {
   const url = e.request.url;
 
-  // API Google — sempre vai para a rede (dados precisam ser frescos)
   if (url.includes('googleapis.com') || url.includes('accounts.google.com')) {
     e.respondWith(fetch(e.request).catch(() => new Response('offline', { status: 503 })));
     return;
   }
 
-  // Assets estáticos — cache-first, fallback para rede
+  const isAppShell = e.request.destination === 'document' ||
+                      e.request.destination === 'script' ||
+                      e.request.destination === 'style';
+
+  if (isAppShell) {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if (res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+        }
+        return res;
+      }).catch(() =>
+        caches.match(e.request).then(cached => {
+          if (cached) return cached;
+          if (e.request.mode === 'navigate') return caches.match('/pwa/index.html');
+        })
+      )
+    );
+    return;
+  }
+
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
@@ -54,9 +81,6 @@ self.addEventListener('fetch', e => {
           caches.open(CACHE).then(c => c.put(e.request, clone));
         }
         return res;
-      }).catch(() => {
-        // Fallback offline: retorna index.html para navegação SPA
-        if (e.request.mode === 'navigate') return caches.match('/pwa/index.html');
       });
     })
   );
