@@ -5,7 +5,7 @@
 const CONFIG = {
   // 1. Client ID do Google Cloud (OAuth 2.0)
   //    Acesse: console.cloud.google.com → APIs & Services → Credentials
-  CLIENT_ID: 'SEU_CLIENT_ID_AQUI.apps.googleusercontent.com',
+    CLIENT_ID: '830166894181-592vrfkgpn24sk6vju40t45iv2o6alkm.apps.googleusercontent.com',
 
   // 2. ID da Planilha Google Sheets
   //    É o trecho longo da URL: docs.google.com/spreadsheets/d/ESTE_TRECHO/edit
@@ -13,8 +13,8 @@ const CONFIG = {
 
   // 3. E-mails autorizados (só esses conseguem fazer login)
   ALLOWED_EMAILS: [
-    'joelson@gmail.com',   // ← troque pelo e-mail real do Joelson
-    'raquel@gmail.com',    // ← troque pelo e-mail real da Raquel
+        'eucartografo@gmail.com',  // Joelson
+        'rql.nobre@gmail.com',  // Raquel
   ],
 
   // 4. Membros e categorias (já configurados, altere se quiser)
