@@ -7,10 +7,13 @@ const App = (() => {
   let _currentPage = 'painel';
   let _token = null;
   let _tokenClient = null;
-  let _tokenExpiry = 0;       // timestamp de expiração do access token
-  let _userPayload = null;    // dados do usuário logado
+  let _tokenExpiry = 0;
+  let _userPayload = null;
+  let _navHistory = ['painel'];   // histórico de páginas visitadas
+  let _exitPending = false;       // aguardando confirmação de saída
+  let _perfilOpen = false;        // menu de perfil aberto
 
-  const STORAGE_KEY = 'familia_user'; // chave no localStorage
+  const STORAGE_KEY = 'familia_user';
 
   const PAGE_TITLES = {
     painel: 'Painel', saude: 'Saúde Financeira', contas: 'Contas',
@@ -31,24 +34,31 @@ const App = (() => {
     relatorio: Pages.renderRelatorio,
   };
 
-  // ── Navegação ─────────────────────────────────────────
+  // ── Navegação com histórico ───────────────────────────
   function navigateTo(page) {
     if (page === _currentPage) return;
 
+    // Empurra estado no histórico do browser (para o botão voltar Android funcionar)
+    history.pushState({ page }, '', '#' + page);
+
+    // Atualiza o histórico interno
+    _navHistory.push(page);
+
+    _applyPage(page);
+  }
+
+  function _applyPage(page) {
     document.querySelectorAll('.nav-item, .bn-item').forEach(el => {
       el.classList.toggle('active', el.dataset.page === page);
     });
-
     document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
-    document.getElementById(`page-${page}`).classList.add('active');
+    document.getElementById(`page-${page}`)?.classList.add('active');
     document.getElementById('page-title').textContent = PAGE_TITLES[page] || page;
-
     _currentPage = page;
     loadPage(page);
   }
 
   async function loadPage(page) {
-    // Renova token se estiver perto de expirar (menos de 5 min)
     if (_token && Date.now() > _tokenExpiry - 5 * 60 * 1000) {
       await refreshTokenSilent();
     }
@@ -57,13 +67,87 @@ const App = (() => {
     if (renderer) renderer(el);
   }
 
-  // ── Token: renovação silenciosa ──────────────────────
+  // ── Botão voltar Android ──────────────────────────────
+  function initBackButton() {
+    // Estado inicial no histórico do browser
+    history.replaceState({ page: 'painel' }, '', '#painel');
+
+    window.addEventListener('popstate', (e) => {
+      // Se o menu de perfil estiver aberto, fecha ele primeiro
+      if (_perfilOpen) {
+        togglePerfilMenu();
+        // Reempurra estado para manter o histórico correto
+        history.pushState({ page: _currentPage }, '', '#' + _currentPage);
+        return;
+      }
+
+      // Se um modal estiver aberto, fecha ele
+      const modalOpen = document.getElementById('modal-overlay')?.classList.contains('open');
+      if (modalOpen) {
+        Pages.closeModal();
+        history.pushState({ page: _currentPage }, '', '#' + _currentPage);
+        return;
+      }
+
+      // Se não estiver na tela de login e tiver histórico, volta para página anterior
+      const appVisible = document.getElementById('screen-app')?.classList.contains('active');
+      if (!appVisible) return;
+
+      if (_navHistory.length > 1) {
+        _navHistory.pop(); // remove página atual
+        const anterior = _navHistory[_navHistory.length - 1];
+        _applyPage(anterior);
+      } else {
+        // Está na raiz (Painel) — mostra confirmação de saída
+        history.pushState({ page: 'painel' }, '', '#painel'); // reempurra para não sair
+        showExitModal();
+      }
+    });
+  }
+
+  // ── Modal de confirmação de saída ────────────────────
+  function showExitModal() {
+    _exitPending = true;
+    document.getElementById('exit-modal').style.display = 'flex';
+  }
+
+  function cancelExit() {
+    _exitPending = false;
+    document.getElementById('exit-modal').style.display = 'none';
+  }
+
+  function confirmExit() {
+    _exitPending = false;
+    document.getElementById('exit-modal').style.display = 'none';
+    // Em PWA standalone, fecha o app
+    if (window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches) {
+      window.close();
+    } else {
+      // No navegador, vai para a página em branco
+      history.back();
+    }
+  }
+
+  // ── Menu de perfil (mobile) ───────────────────────────
+  function togglePerfilMenu() {
+    _perfilOpen = !_perfilOpen;
+    document.getElementById('perfil-menu').style.display = _perfilOpen ? 'flex' : 'none';
+  }
+
+  function updatePerfilMenu(name, email, picture) {
+    const el = document.getElementById('perfil-menu-nome');
+    const em = document.getElementById('perfil-menu-email');
+    const av = document.getElementById('perfil-menu-avatar');
+    if (el) el.textContent = name;
+    if (em) em.textContent = email;
+    if (av) av.src = picture;
+  }
+
+  // ── Token: renovação silenciosa ───────────────────────
   function refreshTokenSilent() {
     return new Promise((resolve) => {
       if (!_tokenClient) { resolve(); return; }
-      // prompt: '' = silencioso, sem popup de confirmação
       _tokenClient.requestAccessToken({ prompt: '' });
-      // resolve imediatamente; o callback do tokenClient vai atualizar _token
       setTimeout(resolve, 1000);
     });
   }
@@ -73,11 +157,10 @@ const App = (() => {
     const tryInit = () => {
       if (typeof google === 'undefined') { setTimeout(tryInit, 200); return; }
 
-      // Inicializa o cliente de ID (para o botão "Entrar com Google")
       google.accounts.id.initialize({
         client_id: CONFIG.CLIENT_ID,
         callback: handleCredential,
-        auto_select: true,          // tenta login automático se já logou antes
+        auto_select: true,
         cancel_on_tap_outside: false,
       });
 
@@ -86,10 +169,7 @@ const App = (() => {
         { theme: 'outline', size: 'large', width: 280, text: 'signin_with', shape: 'pill' }
       );
 
-      // Tenta login automático (One Tap)
       google.accounts.id.prompt((notification) => {
-        // Se o One Tap não funcionar (usuário dispensou antes),
-        // tenta restaurar sessão salva do localStorage
         if (notification.isSkippedMoment() || notification.isDismissedMoment()) {
           tryRestoreSession();
         }
@@ -98,26 +178,22 @@ const App = (() => {
     tryInit();
   }
 
-  // ── Restaurar sessão salva ────────────────────────────
   function tryRestoreSession() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (!saved) return;
       const data = JSON.parse(saved);
-      // Verifica se o e-mail ainda é autorizado
       if (!CONFIG.ALLOWED_EMAILS.includes(data.email)) {
         localStorage.removeItem(STORAGE_KEY);
         return;
       }
-      // Sessão salva válida — renova o token silenciosamente
       _userPayload = data;
-      setupTokenClient(data, /* silent= */ true);
+      setupTokenClient(data, true);
     } catch(e) {
       localStorage.removeItem(STORAGE_KEY);
     }
   }
 
-  // ── Recebe credencial do botão Google ─────────────────
   function handleCredential(response) {
     const payload = parseJwt(response.credential);
 
@@ -126,54 +202,45 @@ const App = (() => {
       return;
     }
 
-    // Salva dados do usuário no localStorage para restaurar sessão
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      email: payload.email,
-      name:  payload.given_name || payload.name || payload.email,
+      email:   payload.email,
+      name:    payload.given_name || payload.name || payload.email,
       picture: payload.picture || '',
     }));
 
     _userPayload = payload;
-    setupTokenClient(payload, /* silent= */ false);
+    setupTokenClient(payload, false);
   }
 
-  // ── Configura o cliente OAuth2 para o Sheets ──────────
   function setupTokenClient(userInfo, silent) {
     _tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: CONFIG.CLIENT_ID,
       scope: 'https://www.googleapis.com/auth/spreadsheets',
-      hint: userInfo.email,       // pré-seleciona a conta correta
+      hint: userInfo.email,
       callback: (tokenResponse) => {
-        if (tokenResponse.error) {
-          // Token falhou — mostra tela de login
-          showLogin();
-          return;
-        }
+        if (tokenResponse.error) { showLogin(); return; }
         _token = tokenResponse.access_token;
-        // Tokens do Google duram 1 hora (3600s)
         _tokenExpiry = Date.now() + (tokenResponse.expires_in || 3600) * 1000;
         Sheets.setToken(_token);
-
-        // Se já temos os dados do usuário, entra direto
-        if (_userPayload || userInfo) {
-          onLoginSuccess(userInfo);
-        }
+        if (_userPayload || userInfo) onLoginSuccess(userInfo);
       },
     });
 
-    // silent = restaurando sessão (sem popup)
-    // !silent = primeiro login (pode mostrar popup de conta)
     _tokenClient.requestAccessToken({ prompt: silent ? 'none' : '' });
   }
 
-  // ── Após login bem-sucedido ────────────────────────────
   async function onLoginSuccess(userInfo) {
     const name    = userInfo.given_name || userInfo.name || userInfo.email;
+    const email   = userInfo.email || '';
     const picture = userInfo.picture || '';
 
+    // Topbar e sidebar
     document.getElementById('user-name').textContent = name;
     document.getElementById('user-avatar').src = picture;
     document.getElementById('user-avatar-mobile').src = picture;
+
+    // Menu de perfil mobile
+    updatePerfilMenu(name, email, picture);
 
     document.getElementById('screen-login').classList.remove('active');
     document.getElementById('screen-app').classList.add('active');
@@ -182,10 +249,10 @@ const App = (() => {
 
     loadPage('painel');
 
-    // Renova token automaticamente a cada 50 minutos (antes de expirar)
+    // Renova token a cada 50 min
     setInterval(refreshTokenSilent, 50 * 60 * 1000);
 
-    // Auto-refresh dos dados a cada 5 minutos
+    // Refresh dos dados a cada 5 min
     setInterval(() => {
       if (document.visibilityState === 'visible') loadPage(_currentPage);
     }, 5 * 60 * 1000);
@@ -202,6 +269,8 @@ const App = (() => {
     _token = null;
     _userPayload = null;
     _tokenExpiry = 0;
+    _navHistory = ['painel'];
+    if (_perfilOpen) togglePerfilMenu();
     google.accounts.id.disableAutoSelect();
     showLogin();
   }
@@ -213,7 +282,6 @@ const App = (() => {
       '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));
   }
 
-  // ── Service Worker (PWA) ──────────────────────────────
   function registerSW() {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js')
@@ -239,12 +307,16 @@ const App = (() => {
     });
 
     document.getElementById('btn-logout').addEventListener('click', logout);
+    document.getElementById('btn-logout-mobile')?.addEventListener('click', logout);
+
+    // Botão voltar Android
+    initBackButton();
 
     initGoogleAuth();
     registerSW();
   }
 
-  return { init, navigateTo };
+  return { init, navigateTo, togglePerfilMenu, cancelExit, confirmExit };
 })();
 
 document.addEventListener('DOMContentLoaded', App.init);
