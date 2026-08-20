@@ -12,6 +12,7 @@ const App = (() => {
   let _navHistory = ['painel'];   // histórico de páginas visitadas
   let _exitPending = false;       // aguardando confirmação de saída
   let _perfilOpen = false;        // menu de perfil aberto
+  let _exiting = false;           // saindo de fato (evita reabrir o modal)
 
   const STORAGE_KEY = 'familia_user';
 
@@ -71,8 +72,16 @@ const App = (() => {
   function initBackButton() {
     // Estado inicial no histórico do browser
     history.replaceState({ page: 'painel' }, '', '#painel');
+    // Empurra uma entrada "coxim" extra: sem ela, na raiz não existe
+    // nenhuma entrada anterior no histórico da página para o popstate
+    // disparar, e o Android fecha o app direto sem mostrar o modal.
+    history.pushState({ page: 'painel' }, '', '#painel');
 
     window.addEventListener('popstate', (e) => {
+      // Se estamos de fato saindo (confirmExit em modo navegador),
+      // deixa o navegador seguir em vez de reinterceptar o back.
+      if (_exiting) return;
+
       // Se o menu de perfil estiver aberto, fecha ele primeiro
       if (_perfilOpen) {
         togglePerfilMenu();
@@ -123,7 +132,9 @@ const App = (() => {
     if (window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches) {
       window.close();
     } else {
-      // No navegador, vai para a página em branco
+      // No navegador, sai do histórico do app (marca _exiting para o
+      // listener de popstate não reinterceptar e reabrir o modal)
+      _exiting = true;
       history.back();
     }
   }
