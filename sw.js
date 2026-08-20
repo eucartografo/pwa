@@ -2,7 +2,7 @@
 //  SERVICE WORKER — cache offline para PWA
 // ══════════════════════════════════════════════════════════
 
-const CACHE = 'familia-v1';
+const CACHE = 'familia-v2';
 const ASSETS = [
   '/',
   '/index.html',
