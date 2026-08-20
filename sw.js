@@ -4,16 +4,17 @@
 
 const CACHE = 'familia-v2';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/style.css',
-  '/config.js',
-  '/sheets.js',
-  '/pages.js',
-  '/app.js',
-  '/manifest.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
+  '/pwa/',
+  '/pwa/index.html',
+  '/pwa/style.css',
+  '/pwa/config.js',
+  '/pwa/financas.js',
+  '/pwa/sheets.js',
+  '/pwa/pages.js',
+  '/pwa/app.js',
+  '/pwa/manifest.json',
+  '/pwa/icons/icon-192.png',
+  '/pwa/icons/icon-512.png',
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap',
 ];
 
@@ -55,7 +56,7 @@ self.addEventListener('fetch', e => {
         return res;
       }).catch(() => {
         // Fallback offline: retorna index.html para navegação SPA
-        if (e.request.mode === 'navigate') return caches.match('/index.html');
+        if (e.request.mode === 'navigate') return caches.match('/pwa/index.html');
       });
     })
   );
