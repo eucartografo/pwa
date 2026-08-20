@@ -114,7 +114,7 @@ const App = (() => {
     });
   }
 
-  // ── Modal de confirmação de saída ────────────────────
+  // ── Modal de confirmação de saída ───────────────────
   function showExitModal() {
     _exitPending = true;
     document.getElementById('exit-modal').style.display = 'flex';
@@ -298,6 +298,16 @@ const App = (() => {
       navigator.serviceWorker.register('sw.js')
         .then(r => console.log('SW:', r.scope))
         .catch(e => console.log('SW erro:', e));
+
+      // Quando um novo service worker assume o controle (nova versão
+      // publicada), recarrega a página automaticamente para pegar os
+      // arquivos novos, em vez de ficar preso na versão antiga em cache.
+      let _swRefreshed = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (_swRefreshed) return;
+        _swRefreshed = true;
+        window.location.reload();
+      });
     }
   }
 
