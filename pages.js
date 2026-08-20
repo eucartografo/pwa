@@ -936,34 +936,6 @@ const Pages = (() => {
       }}
     ]);
   }
-    openModal('Nova Meta', `
-      <div class="form-group"><label class="form-label">Nome do Objetivo</label>
-        <input class="form-control" type="text" id="meta-nome" placeholder="ex: Poupança Educação - Davi"></div>
-      <div class="form-row form-row-2">
-        <div class="form-group"><label class="form-label">Valor da Meta (R$)</label>
-          <input class="form-control" type="number" id="meta-meta" step="0.01" placeholder="0,00"></div>
-        <div class="form-group"><label class="form-label">Já Guardado (R$)</label>
-          <input class="form-control" type="number" id="meta-guardado" step="0.01" placeholder="0,00" value="0"></div>
-      </div>
-      <div class="form-group"><label class="form-label">Aporte Mensal Planejado (R$)</label>
-        <input class="form-control" type="number" id="meta-aporte" step="0.01" placeholder="0,00"></div>
-      <div class="form-group"><label class="form-label">Observação (opcional)</label>
-        <input class="form-control" type="text" id="meta-obs" placeholder="ex: Faculdade do Davi"></div>
-    `, [
-      { label:'Salvar', cls:'btn-success', action: async () => {
-        const nome = document.getElementById('meta-nome').value.trim();
-        const meta = parseFloat(document.getElementById('meta-meta').value) || 0;
-        const guardado = parseFloat(document.getElementById('meta-guardado').value) || 0;
-        const aporte = parseFloat(document.getElementById('meta-aporte').value) || 0;
-        const obs = document.getElementById('meta-obs').value.trim();
-        if (!nome || !meta) return toast('Preencha nome e valor da meta', 'error');
-        await Sheets.append(CONFIG.SHEETS.METAS, [[nome, meta, guardado, aporte, obs]]);
-        toast('Meta criada!', 'success'); closeModal();
-        renderMetas(document.getElementById('page-metas'));
-      }}
-    ]);
-  }
-
   function openNovaMeta() {
     openModal('Nova Meta (Nível 3)', `
       <div class="nivel-filosofia" style="margin-bottom:16px">
