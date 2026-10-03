@@ -83,17 +83,37 @@ const Sheets = (() => {
     try {
       // Tenta ler a aba CONTAS para ver se já existe
       await read(CONFIG.SHEETS.CONTAS, 'A1');
+      // initSpreadsheet() roda a cada login E a cada renovação silenciosa de
+      // token (a cada 50min, enquanto o app ficar aberto) — só tenta migrar
+      // uma vez por sessão, não indefinidamente.
+      if (!_migrouLancadoPor) { await migrarColunaLancadoPor(); _migrouLancadoPor = true; }
     } catch {
       // Cria todas as abas via batchUpdate
       await createAllSheets();
     }
   }
 
+  let _migrouLancadoPor = false;
+
+  // Planilhas criadas antes da coluna LANÇADO_POR existir não têm esse
+  // cabeçalho — adiciona automaticamente se estiver faltando, sem apagar
+  // nenhum dado já lançado.
+  async function migrarColunaLancadoPor() {
+    try {
+      const [recHead, despHead] = await Promise.all([
+        read(CONFIG.SHEETS.RECEITAS, 'H1'),
+        read(CONFIG.SHEETS.DESPESAS, 'I1'),
+      ]);
+      if (!recHead.length)  await update(CONFIG.SHEETS.RECEITAS, 'H1', [['LANÇADO_POR']]);
+      if (!despHead.length) await update(CONFIG.SHEETS.DESPESAS, 'I1', [['LANÇADO_POR']]);
+    } catch(e) { console.warn('Migração LANÇADO_POR:', e); }
+  }
+
   async function createAllSheets() {
     const sheetDefs = [
       { name: CONFIG.SHEETS.CONTAS,    headers: ['CONTA','RESPONSÁVEL','SALDO'] },
-      { name: CONFIG.SHEETS.RECEITAS,  headers: ['ID','DATA','DESCRIÇÃO','CATEGORIA','RESPONSÁVEL','CONTA','VALOR'] },
-      { name: CONFIG.SHEETS.DESPESAS,  headers: ['ID','DATA','DESCRIÇÃO','CATEGORIA','PARA_QUEM','CONTA','FORMA_PGTO','VALOR'] },
+      { name: CONFIG.SHEETS.RECEITAS,  headers: ['ID','DATA','DESCRIÇÃO','CATEGORIA','RESPONSÁVEL','CONTA','VALOR','LANÇADO_POR'] },
+      { name: CONFIG.SHEETS.DESPESAS,  headers: ['ID','DATA','DESCRIÇÃO','CATEGORIA','PARA_QUEM','CONTA','FORMA_PGTO','VALOR','LANÇADO_POR'] },
       { name: CONFIG.SHEETS.ORCAMENTO, headers: ['CATEGORIA','META_MENSAL'] },
       { name: CONFIG.SHEETS.CARTAO,    headers: ['CARTÃO','TITULAR','LIMITE','DIA_VENC'] },
       { name: CONFIG.SHEETS.DIVIDAS,   headers: ['DESCRIÇÃO','RESPONSÁVEL','VALOR_TOTAL','PARCELA','N_PARCELAS','PAGAS','DATA_INICIO'] },
@@ -149,7 +169,8 @@ const Sheets = (() => {
       _row: i + 2, // linha real na planilha (1-based, +1 pelo cabeçalho)
       id: r[0] || '', data: r[1] || '', desc: r[2] || '',
       cat: r[3] || '', resp: r[4] || '', conta: r[5] || '',
-      valor: parseFloat((r[6]||'0').toString().replace(',','.')) || 0
+      valor: parseFloat((r[6]||'0').toString().replace(',','.')) || 0,
+      lancadoPor: r[7] || ''
     }));
   }
 
@@ -159,7 +180,8 @@ const Sheets = (() => {
       _row: i + 2,
       id: r[0] || '', data: r[1] || '', desc: r[2] || '',
       cat: r[3] || '', para: r[4] || '', conta: r[5] || '',
-      forma: r[6] || '', valor: parseFloat((r[7]||'0').toString().replace(',','.')) || 0
+      forma: r[6] || '', valor: parseFloat((r[7]||'0').toString().replace(',','.')) || 0,
+      lancadoPor: r[8] || ''
     }));
   }
 

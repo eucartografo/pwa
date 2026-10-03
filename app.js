@@ -337,7 +337,12 @@ const App = (() => {
     registerSW();
   }
 
-  return { init, navigateTo, togglePerfilMenu, cancelExit, confirmExit };
+  // ── Nome do usuário logado (usado para registrar quem lançou cada item) ──
+  function getUserName() {
+    return _userPayload?.given_name || _userPayload?.name || _userPayload?.email || '';
+  }
+
+  return { init, navigateTo, togglePerfilMenu, cancelExit, confirmExit, getUserName };
 })();
 
 document.addEventListener('DOMContentLoaded', App.init);

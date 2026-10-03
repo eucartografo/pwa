@@ -16,6 +16,12 @@ const Financas = (() => {
   function mesAtual()  { return new Date().getMonth() + 1; }
   function anoAtual()  { return new Date().getFullYear(); }
 
+  function mesAnterior(mes, ano) {
+    let m = mes - 1, a = ano;
+    if (m === 0) { m = 12; a--; }
+    return { mes: m, ano: a };
+  }
+
   function filtrarPeriodo(items, campo, mes, ano) {
     return items.filter(i => {
       if (!i[campo]) return false;
@@ -43,6 +49,14 @@ const Financas = (() => {
     const luisa    = desp.filter(d => d.para === 'Luísa').reduce((s, d) => s + d.valor, 0);
     const familia  = desp.filter(d => d.para === 'Família (geral)').reduce((s, d) => s + d.valor, 0);
     return { total, joelson, raquel, davi, luisa, familia };
+  }
+
+  // ─── Gastos mensais por categoria ("para onde foi o dinheiro") ──
+  function calcGastosPorCategoria(despesas, mes, ano) {
+    const mesItems = filtrarPeriodo(despesas, 'data', mes, ano);
+    const map = {};
+    mesItems.forEach(d => { map[d.cat] = (map[d.cat] || 0) + d.valor; });
+    return Object.entries(map).map(([cat, valor]) => ({ cat, valor })).sort((a,b) => b.valor - a.valor);
   }
 
   // ─── Parcelas ativas e comprometimento futuro ─────────
@@ -195,10 +209,41 @@ const Financas = (() => {
     return hist;
   }
 
+  // ─── Histórico mensal incluindo dívida comprometida ──
+  // Igual a calcHistorico, mas também calcula quanto estava comprometido
+  // em parcelas de dívida em cada mês (para o gráfico Receitas × Dívidas
+  // com Despesas em linha, na Saúde Financeira).
+  function calcHistoricoComDividas(receitas, despesas, dividas, nMeses = 6) {
+    const hoje = new Date();
+    const hist = [];
+    const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    for (let i = nMeses - 1; i >= 0; i--) {
+      let m = hoje.getMonth() + 1 - i;
+      let y = hoje.getFullYear();
+      while (m <= 0) { m += 12; y--; }
+      const rec  = filtrarPeriodo(receitas, 'data', m, y).reduce((s, r) => s + r.valor, 0);
+      const desp = filtrarPeriodo(despesas, 'data', m, y).reduce((s, r) => s + r.valor, 0);
+
+      const refMes = new Date(y, m - 1, 1);
+      const divida = dividas.filter(d => d.nParc > 0 && d.inicio).reduce((s, d) => {
+        // Parse manual (não `new Date(str)`) para não interpretar a data como UTC
+        // e deslocar o mês ao reconvertê-la para o horário local (ex: Brasil, UTC-3).
+        const [iy, im] = d.inicio.split('-').map(Number);
+        const inicioMes = new Date(iy, im - 1, 1);
+        const fimMes = new Date(inicioMes);
+        fimMes.setMonth(fimMes.getMonth() + d.nParc - 1);
+        return (refMes >= inicioMes && refMes <= fimMes) ? s + d.parcela : s;
+      }, 0);
+
+      hist.push({ mes: MESES[m - 1], ano: y, rec, desp, divida });
+    }
+    return hist;
+  }
+
   return {
-    calcRendaMensal, calcGastosMensal, calcParcelasAtivas,
+    calcRendaMensal, calcGastosMensal, calcGastosPorCategoria, calcParcelasAtivas,
     calcSemaforo, alertaComprometimento, calcImpactoNovaParcela,
-    calcHistorico, filtrarPeriodo, mesAtual, anoAtual,
+    calcHistorico, calcHistoricoComDividas, filtrarPeriodo, mesAtual, anoAtual, mesAnterior,
     LIMITE_COMPROMETIMENTO, LIMITE_CRITICO, META_POUPANCA,
   };
 })();

@@ -84,12 +84,14 @@ O Google Sheets funciona como banco de dados. O app cria automaticamente as abas
 | Aba | Colunas | Descrição |
 |---|---|---|
 | `CONTAS` | CONTA, RESPONSÁVEL, SALDO | Saldos das contas bancárias |
-| `RECEITAS` | ID, DATA, DESCRIÇÃO, CATEGORIA, RESPONSÁVEL, CONTA, VALOR | Entradas de dinheiro |
-| `DESPESAS` | ID, DATA, DESCRIÇÃO, CATEGORIA, PARA_QUEM, CONTA, FORMA_PGTO, VALOR | Saídas de dinheiro |
+| `RECEITAS` | ID, DATA, DESCRIÇÃO, CATEGORIA, RESPONSÁVEL, CONTA, VALOR, LANÇADO_POR | Entradas de dinheiro |
+| `DESPESAS` | ID, DATA, DESCRIÇÃO, CATEGORIA, PARA_QUEM, CONTA, FORMA_PGTO, VALOR, LANÇADO_POR | Saídas de dinheiro |
 | `ORÇAMENTO` | CATEGORIA, META_MENSAL | Meta de gasto por categoria |
 | `CARTÃO` | CARTÃO, TITULAR, LIMITE, DIA_VENC | Cartões de crédito cadastrados |
 | `DÍVIDAS` | DESCRIÇÃO, RESPONSÁVEL, VALOR_TOTAL, PARCELA, N_PARCELAS, PAGAS, DATA_INICIO | Dívidas e parcelamentos |
 | `METAS` | OBJETIVO, META, GUARDADO, APORTE_MENSAL, OBSERVAÇÃO | Objetivos financeiros |
+
+> `RESPONSÁVEL`/`PARA_QUEM` indicam de quem é o dinheiro/gasto. `LANÇADO_POR` é diferente: é o nome de quem estava logado no app no momento em que o lançamento foi criado (Joelson ou Raquel) — útil para saber quem registrou cada item. É preenchido automaticamente a partir da sessão Google logada; não é editável no formulário. Planilhas criadas antes dessa coluna existir recebem o cabeçalho automaticamente na primeira vez que o app carrega (`Sheets.migrarColunaLancadoPor`); lançamentos antigos ficam com esse campo em branco.
 
 ### Acesso à API
 
@@ -114,7 +116,7 @@ Responsável por:
 - **Modal de confirmação de saída** quando o usuário está na tela inicial e pressiona voltar
 - **Menu de perfil mobile** — clique no avatar abre menu com Sair e atalhos para páginas
 
-Funções exportadas: `init`, `navigateTo`, `togglePerfilMenu`, `cancelExit`, `confirmExit`
+Funções exportadas: `init`, `navigateTo`, `togglePerfilMenu`, `cancelExit`, `confirmExit`, `getUserName` (nome do usuário logado, usado para registrar quem lançou cada receita/despesa)
 
 ### `financas.js` — Motor de Cálculo
 
@@ -129,6 +131,9 @@ Motor central de análise financeira. Funções principais:
 | `alertaComprometimento(receitas, despesas, mes, ano)` | Alerta individual: "Raquel, você já gastou 70% do salário" |
 | `calcImpactoNovaParcela(parcela, nParc, inicio, dividas, renda)` | Impacto de uma nova compra parcelada na renda familiar |
 | `calcHistorico(receitas, despesas, nMeses)` | Histórico mensal para o gráfico dos últimos N meses |
+| `calcGastosPorCategoria(despesas, mes, ano)` | Despesas do mês agrupadas por categoria, ordenadas da maior para a menor — base do gráfico "Para Onde Foi Seu Dinheiro" no Painel |
+| `calcHistoricoComDividas(receitas, despesas, dividas, nMeses)` | Igual ao anterior, mas também soma quanto estava comprometido em parcelas de dívida em cada mês — usado no gráfico "Receitas × Dívidas com Despesas em linha" da Saúde Financeira |
+| `mesAnterior(mes, ano)` | Retorna `{ mes, ano }` do mês anterior ao informado (trata virada de ano) |
 
 **Limites financeiros configurados:**
 - `LIMITE_COMPROMETIMENTO = 0.30` — 30% da renda em parcelas = amarelo
@@ -152,22 +157,27 @@ Contém um renderer para cada página. Todas as funções recebem o elemento `el
 
 | Função | Página |
 |---|---|
-| `renderPainel(el)` | Dashboard com KPIs, lançamentos recentes, progresso de metas |
-| `renderSaude(el)` | Semáforo, alertas pessoais, gráfico renda×gastos, parcelas ativas |
+| `renderPainel(el)` | Dashboard: **"Para Onde Foi Seu Dinheiro"** (gráfico de rosca por categoria + frase-resumo + maior gasto do mês) é o primeiro bloco da tela; KPIs grandes só para Receitas/Despesas/Saldo do Mês; demais números (saldo em contas, acumulado, reserva, por pessoa, dívidas) em `stat-chip`s compactos; lançamentos recentes; progresso de metas |
+| `renderSaude(el)` | Semáforo, alertas pessoais, gráfico renda×gastos, gráfico receitas×dívidas com despesas em linha, parcelas ativas |
 | `renderContas(el)` | Saldos das contas com botão de atualização |
-| `renderReceitas(el)` | Lançamentos do mês com totais por pessoa |
-| `renderDespesas(el)` | Lançamentos com filtro por membro |
+| `renderReceitas(el)` | Seletor de mês/ano, busca, filtro por pessoa, ordenação Data/A-Z, edição e exclusão com confirmação, mostra quem lançou |
+| `renderDespesas(el)` | Seletor de mês/ano, busca, filtro por pessoa, ordenação Data/A-Z, edição e exclusão com confirmação, mostra quem lançou |
 | `renderOrcamento(el)` | Meta vs realizado por categoria com barras de progresso |
-| `renderCartao(el)` | Fatura atual calculada automaticamente das despesas |
-| `renderDividas(el)` | Cards de dívidas com progresso e registro de parcelas |
+| `renderCartao(el)` | Fatura atual calculada automaticamente das despesas, edição de limite/vencimento |
+| `renderDividas(el)` | Filtro por responsável, cards de dívidas com progresso, edição, registro de parcelas |
 | `renderMetas(el)` | **Sistema de 3 níveis** — Dívidas → Reserva → Metas livres |
-| `renderRelatorio(el)` | Relatório mensal com seletor de período e exportação PDF |
+| `renderRelatorio(el)` | Relatório mensal com seletor de período e exportação (PDF ou CSV, seções selecionáveis) |
 
 **Funções de formulário (modais):**
-- `openNovaDespesa()` — detecta cartão de crédito e exibe impacto de parcelamento
-- `openNovaDivida()` — calcula impacto na renda em tempo real ao digitar
+- `openNovaDespesa(preencher?, dataSugestao?)` — cria ou edita (quando `preencher` tem `_row`); detecta cartão de crédito e exibe impacto de parcelamento ao criar
+- `openNovaReceita(preencher?, dataSugestao?)` — cria ou edita uma receita
+- `openNovaDivida(preencher?)` — cria ou edita uma dívida; calcula impacto na renda em tempo real ao digitar
+- `encontrarDuplicata(cache, data, desc, valor, excludeRow?)` / `confirmarSeDuplicado(...)` — antes de salvar uma nova despesa/receita, avisa se já existe um lançamento com a mesma data, valor e descrição, e pede confirmação para continuar
 - `openNovaMetaReserva()` — formulário simplificado para Reserva de Emergência
+- `editarCartao(row, nome, limite, diaVenc)` — edita limite/vencimento de um cartão
+- `confirmModal(mensagem, onConfirm)` — modal de confirmação usada antes de qualquer exclusão
 - `_calcImpactoParc()` / `_calcImpactoDivida()` — cálculo em tempo real do impacto de novas parcelas
+- `openExportarRelatorio()` — modal com checkboxes (Receitas/Despesas/Dívidas/Gráficos) e escolha de formato (PDF ou CSV); chama `gerarPDFRelatorio(opts)` ou `gerarCSVRelatorio(opts)` conforme a escolha. O PDF desenha os gráficos como SVG puro (`svgGroupedBars`, sem bibliotecas externas) para imprimir corretamente; o CSV sai com BOM UTF-8 e colunas separadas por `;` (compatível com Excel/Sheets em pt-BR)
 
 ---
 
@@ -334,6 +344,11 @@ git push
 | v6 | Fix: `manifest.json` com `start_url: /pwa/` e `sw.js` com paths `/pwa/` |
 | v7 | Login persistente via `localStorage` + renovação silenciosa de token OAuth |
 | v8 | Navegação com histórico, botão voltar Android, modal de saída, menu perfil mobile |
+| v9 | Busca e filtro por pessoa em Receitas/Despesas/Dívidas, ordenação A-Z, edição de despesas/receitas/dívidas/limite do cartão, confirmação antes de excluir, seletor de mês em Receitas/Despesas, saldo acumulado e saldo do mês anterior no Painel, resumo de dívidas com "marcar parcela paga" no Painel |
+| v10 | Coluna LANÇADO_POR (identifica quem registrou cada receita/despesa), aviso de possível lançamento duplicado, gráfico "Receitas × Dívidas com Despesas em linha" (histórico de 6 meses) na Saúde Financeira, script de backup semanal automático da planilha (`backup-planilha.gs`) |
+| v11 | Exportação do Relatório com seções selecionáveis (Receitas/Despesas/Dívidas/Gráficos) em PDF (com gráficos SVG) ou CSV (com BOM UTF-8, para Excel/Sheets) |
+| v12 | Painel responde "Para onde foi meu dinheiro": gráfico de rosca por categoria com comparação ao mês anterior, e destaque do maior gasto do mês |
+| v13 | Auditoria de código (5 bugs corrigidos) + revisão visual do Painel: bloco "Para Onde Foi Seu Dinheiro" movido para o topo da tela com frase-resumo e donut maior; KPIs secundários (saldo em contas, acumulado, reserva, por pessoa, dívidas) convertidos em `stat-chip`s compactos para reduzir a "parede de cards coloridos" e focar a atenção na resposta da pergunta |
 
 ---
 
@@ -353,3 +368,15 @@ git push
 - **Desenvolvido com** Claude (Anthropic) — modelo próprio, livre para uso e edição
 - **Repositório:** https://github.com/eucartografo/pwa
 - **App em produção:** https://eucartografo.github.io/pwa/
+
+---
+
+## 16. Backup Semanal de Segurança
+
+O Google Sheets já guarda histórico de versões (File → Histórico de versões, dentro do próprio Sheets), mas isso não protege contra, por exemplo, apagar a planilha inteira por engano. Por isso existe um backup automático adicional:
+
+- **Arquivo:** [`backup-planilha.gs`](./backup-planilha.gs) — script do Google Apps Script.
+- **O que faz:** toda semana, cria uma cópia completa da planilha "Orçamento Familiar" numa pasta `Backups - Orçamento Familiar` no Google Drive do usuário. Backups com mais de 180 dias são apagados automaticamente para não acumular lixo.
+- **Por que Apps Script e não algo no app:** o app é 100% estático (GitHub Pages), sem servidor — não existe como agendar uma tarefa que rode "mesmo que ninguém abra o app". O Apps Script roda dentro da infraestrutura do Google, vinculado à própria planilha, então o backup acontece de verdade todo domingo independente de alguém abrir o app ou o celular naquele dia.
+- **Configuração:** é manual e feita uma única vez (não pode ser feita por este repositório, pois exige autorizar o script com a conta Google do usuário). Passo a passo completo nos comentários do topo do arquivo `backup-planilha.gs`.
+- **Para restaurar:** abra a pasta de backups no Drive, escolha a cópia da data desejada, e copie os dados de volta para a planilha principal (ou passe a usar aquela cópia, atualizando `SPREADSHEET_ID` em `config.js`).
