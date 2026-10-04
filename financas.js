@@ -116,8 +116,8 @@ const Financas = (() => {
     else if (compRenda > LIMITE_COMPROMETIMENTO) { score -= 15; msgs.push({ tipo: 'warn', txt: `${(compRenda*100).toFixed(0)}% da renda comprometida com parcelas` }); }
 
     if (taxaPoupanca < 0) { score -= 20; msgs.push({ tipo: 'danger', txt: 'Mês no negativo: gastando mais do que entra' }); }
-    else if (taxaPoupanca < 0.10) { score -= 10; msgs.push({ tipo: 'warn', txt: 'Poupança abaixo de 10% — tente aumentar' }); }
-    else if (taxaPoupanca >= META_POUPANCA) { msgs.push({ tipo: 'ok', txt: `Poupando ${(taxaPoupanca*100).toFixed(0)}% da renda — ótimo!` }); }
+    else if (taxaPoupanca < 0.10) { score -= 10; msgs.push({ tipo: 'warn', txt: 'Poupança abaixo de 10%. Tente aumentar.' }); }
+    else if (taxaPoupanca >= META_POUPANCA) { msgs.push({ tipo: 'ok', txt: `Poupando ${(taxaPoupanca*100).toFixed(0)}% da renda, ótimo!` }); }
 
     if (parcelasAtivas > 5) { score -= 10; msgs.push({ tipo: 'warn', txt: `${parcelasAtivas} compras parceladas ativas` }); }
 

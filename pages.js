@@ -37,6 +37,53 @@ const Pages = (() => {
 
   const ICON_EDIT = '<svg viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--gray-300)"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>';
 
+  // ─── Celebração ao quitar uma parcela de dívida ────────
+  // Confete em CSS/JS puro (sem biblioteca) + um acorde curto via Web Audio
+  // API (sem arquivo de áudio). Recompensa visual/sonora pra reforçar o
+  // hábito de quitar dívidas.
+  const CONFETE_CORES = ['#1E7B45', '#2E5395', '#E07B39', '#BF9000', '#C0392B', '#4CAF91'];
+
+  function lancarConfete(quantidade = 60) {
+    const container = document.createElement('div');
+    container.className = 'confete-container';
+    document.body.appendChild(container);
+    for (let i = 0; i < quantidade; i++) {
+      const pedaco = document.createElement('div');
+      pedaco.className = 'confete-pedaco';
+      pedaco.style.left = `${Math.random() * 100}vw`;
+      pedaco.style.background = CONFETE_CORES[Math.floor(Math.random() * CONFETE_CORES.length)];
+      pedaco.style.animationDuration = `${1.6 + Math.random() * 1.2}s`;
+      pedaco.style.animationDelay = `${Math.random() * 0.35}s`;
+      pedaco.style.setProperty('--giro', `${360 + Math.random() * 540}deg`);
+      container.appendChild(pedaco);
+    }
+    setTimeout(() => container.remove(), 3200);
+  }
+
+  function tocarSomSucesso(grande = false) {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const notas = grande ? [523.25, 659.25, 783.99, 1046.5] : [659.25, 987.77];
+      notas.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const inicio = ctx.currentTime + i * 0.09;
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, inicio);
+        gain.gain.exponentialRampToValueAtTime(0.22, inicio + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, inicio + 0.45);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(inicio);
+        osc.stop(inicio + 0.45);
+      });
+      setTimeout(() => ctx.close(), (notas.length * 90 + 500));
+    } catch(e) { /* áudio bloqueado/indisponível: segue sem som, sem quebrar o fluxo */ }
+  }
+
   // Gap (em %) entre colunas do gráfico "Receitas × Dívidas com Despesas em
   // linha" — tem que ser exatamente o mesmo valor do `gap` de `.hd-chart` em
   // style.css, senão a linha em SVG desalinha das barras em flexbox.
@@ -170,10 +217,10 @@ const Pages = (() => {
       el.innerHTML = `
         <p class="text-xs text-gray mb-12">${new Date().toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</p>
 
-        <p class="section-title" style="margin-top:0">Para Onde Foi Seu Dinheiro — ${MESES_NOMES[mesAtual()-1]}</p>
+        <p class="section-title" style="margin-top:0">Para Onde Foi Seu Dinheiro em ${MESES_NOMES[mesAtual()-1]}</p>
         ${catSlices.length ? `
           <div class="card mb-12"><div class="card-body">
-            ${catSlices[0] ? `<p class="donut-headline">Você gastou <strong>${fmt(totalCatAtual)}</strong> este mês — <strong>${fmtPct(catSlices[0].valor / totalCatAtual)}</strong> foi com <strong>${catSlices[0].cat}</strong>.</p>` : ''}
+            ${catSlices[0] ? `<p class="donut-headline">Você gastou <strong>${fmt(totalCatAtual)}</strong> este mês: <strong>${fmtPct(catSlices[0].valor / totalCatAtual)}</strong> foi com <strong>${catSlices[0].cat}</strong>.</p>` : ''}
             <div class="donut-wrap">
               ${svgDonut(catSlices, 190, 30)}
               <div class="donut-center">
@@ -437,7 +484,7 @@ const Pages = (() => {
         <div class="kpi-card kpi-teal"><div class="kpi-label">Raquel</div><div class="kpi-value">${fmt(totRaquel)}</div></div>
       </div>
       <div class="flex justify-between items-center" style="margin:24px 0 12px">
-        <p class="section-title" style="margin:0">Lançamentos — ${nomeMesSel}</p>
+        <p class="section-title" style="margin:0">Lançamentos de ${nomeMesSel}</p>
         <span class="text-xs text-gray">${lista.length} · ${fmt(lista.reduce((s,i) => s + i.valor, 0))}</span>
       </div>
       ${lista.length ? `<div class="tx-list">
@@ -613,7 +660,7 @@ const Pages = (() => {
         <div class="kpi-card kpi-orange"><div class="kpi-label">Família Geral</div><div class="kpi-value">${fmt(totFamilia)}</div></div>
       </div>
       <div class="flex justify-between items-center" style="margin:24px 0 12px">
-        <p class="section-title" style="margin:0">Lançamentos — ${nomeMesSel}</p>
+        <p class="section-title" style="margin:0">Lançamentos de ${nomeMesSel}</p>
         <span class="text-xs text-gray">${lista.length} · ${fmt(lista.reduce((s,i) => s + i.valor, 0))}</span>
       </div>
       ${lista.length ? `<div class="tx-list">
@@ -802,8 +849,8 @@ const Pages = (() => {
         </div>
         <div class="impacto-linha">Esta parcela vai até: <strong>${impacto.dataFimStr}</strong></div>
         <div class="impacto-linha">Parcela mais longa existente: <strong>${impacto.maisLongaStr}</strong></div>
-        ${impacto.critico ? '<div class="impacto-alerta danger">⛔ Acima de 50% — comprometimento crítico da renda familiar!</div>'
-          : impacto.alerta ? '<div class="impacto-alerta warn">⚠️ Acima de 30% — avalie se realmente precisa dessa compra.</div>'
+        ${impacto.critico ? '<div class="impacto-alerta danger">⛔ Acima de 50%: comprometimento crítico da renda familiar!</div>'
+          : impacto.alerta ? '<div class="impacto-alerta warn">⚠️ Acima de 30%: avalie se realmente precisa dessa compra.</div>'
           : '<div class="impacto-alerta ok">✅ Comprometimento dentro do limite recomendado.</div>'}
       `;
     } catch(e) { console.error(e); }
@@ -968,7 +1015,7 @@ const Pages = (() => {
         <select class="form-control toolbar-filter" onchange="Pages._divSetFiltro(this)">${filtroOpts}</select>
       </div>
       <div class="kpi-grid" style="grid-template-columns:1fr 1fr">
-        <div class="kpi-card kpi-red"><div class="kpi-label">Saldo Devedor${filtro!=='Todos' ? ' — '+filtro : ' Total'}</div><div class="kpi-value">${fmt(totalDevedor)}</div></div>
+        <div class="kpi-card kpi-red"><div class="kpi-label">Saldo Devedor${filtro!=='Todos' ? ' de '+filtro : ' Total'}</div><div class="kpi-value">${fmt(totalDevedor)}</div></div>
         <div class="kpi-card kpi-orange"><div class="kpi-label">Parcelas/Mês</div><div class="kpi-value">${fmt(totalParcelas)}</div></div>
       </div>
       <div class="flex justify-between items-center mb-12 mt-16">
@@ -1094,7 +1141,7 @@ const Pages = (() => {
         <div class="impacto-linha">Esta parcela vai até: <strong>${impacto.dataFimStr}</strong></div>
         <div class="impacto-linha">Você já tem <strong>${impacto.nAtivas} compromisso(s) parcelado(s)</strong></div>
         ${impacto.critico ? '<div class="impacto-alerta danger">⛔ Atenção: comprometimento crítico acima de 50% da renda!</div>'
-          : impacto.alerta ? '<div class="impacto-alerta warn">⚠️ Acima de 30% — pense bem antes de assumir mais parcelas.</div>'
+          : impacto.alerta ? '<div class="impacto-alerta warn">⚠️ Acima de 30%: pense bem antes de assumir mais parcelas.</div>'
           : '<div class="impacto-alerta ok">✅ Comprometimento dentro do limite recomendado (abaixo de 30%).</div>'}
       `;
     } catch(e) { console.error(e); }
@@ -1103,7 +1150,10 @@ const Pages = (() => {
   async function registrarPagamentoDivida(row, pagas, nParc) {
     if (pagas >= nParc) return toast('Dívida já quitada!', 'success');
     await Sheets.update(CONFIG.SHEETS.DIVIDAS, `F${row}`, [[pagas + 1]]);
-    toast('Parcela registrada!', 'success');
+    const quitouAgora = pagas + 1 >= nParc;
+    lancarConfete(quitouAgora ? 100 : 55);
+    tocarSomSucesso(quitouAgora);
+    toast(quitouAgora ? 'Dívida quitada! 🎉' : 'Parcela registrada!', 'success');
     const active = document.querySelector('.page.active');
     if (active?.id === 'page-painel') renderPainel(active);
     else if (active?.id === 'page-dividas') renderDividas(active);
@@ -1148,11 +1198,11 @@ const Pages = (() => {
           <div class="nf-icon">🏆</div>
           <div>
             <div class="nf-titulo">Construção financeira em níveis</div>
-            <div class="nf-sub">Cada nível só faz sentido depois que o anterior estiver concluído. Não poupamos enquanto temos dívidas — os juros sempre ganham.</div>
+            <div class="nf-sub">Cada nível só faz sentido depois que o anterior estiver concluído. Não poupamos enquanto temos dívidas, pois os juros sempre ganham.</div>
           </div>
         </div>
 
-        <!-- ════ NÍVEL 1 — QUITAR DÍVIDAS ════ -->
+        <!-- ════ NÍVEL 1: QUITAR DÍVIDAS ════ -->
         <div class="nivel-wrap ${n1ok ? 'nivel-ok' : 'nivel-ativo'}">
           <div class="nivel-header">
             <div class="nivel-badge ${n1ok ? 'badge-ok' : 'badge-ativo'}">
@@ -1205,7 +1255,7 @@ const Pages = (() => {
           </div>
         </div>
 
-        <!-- ════ NÍVEL 2 — RESERVA DE EMERGÊNCIA ════ -->
+        <!-- ════ NÍVEL 2: RESERVA DE EMERGÊNCIA ════ -->
         <div class="nivel-wrap ${!n1ok ? 'nivel-bloqueado' : n2ok ? 'nivel-ok' : 'nivel-ativo'}">
           <div class="nivel-header">
             <div class="nivel-badge ${!n1ok ? 'badge-bloqueado' : n2ok ? 'badge-ok' : 'badge-ativo'}">
@@ -1246,7 +1296,7 @@ const Pages = (() => {
                 </div>`;
               })()}
             ` : `
-              <p class="nivel-desc">Você ainda não cadastrou sua Reserva de Emergência. Crie agora — o objetivo é ter 6 meses de despesas guardados.</p>
+              <p class="nivel-desc">Você ainda não cadastrou sua Reserva de Emergência. Crie agora: o objetivo é ter 6 meses de despesas guardados.</p>
               <button class="btn btn-success btn-sm" onclick="Pages.openNovaMetaReserva()">
                 + Criar Reserva de Emergência
               </button>
@@ -1254,7 +1304,7 @@ const Pages = (() => {
           </div>
         </div>
 
-        <!-- ════ NÍVEL 3 — METAS LIVRES ════ -->
+        <!-- ════ NÍVEL 3: METAS LIVRES ════ -->
         <div class="nivel-wrap ${!n2ok ? 'nivel-bloqueado' : 'nivel-ativo'}">
           <div class="nivel-header">
             <div class="nivel-badge ${!n2ok ? 'badge-bloqueado' : 'badge-ativo'}">
@@ -1274,7 +1324,7 @@ const Pages = (() => {
               ${metasLivres.length ? `
                 <div class="metas-preview-bloqueado">
                   <div class="mpb-titulo">Suas metas aguardando:</div>
-                  ${metasLivres.map(m => `<div class="mpb-item">🔒 ${m.nome} — ${fmt(m.meta)}</div>`).join('')}
+                  ${metasLivres.map(m => `<div class="mpb-item">🔒 ${m.nome}: ${fmt(m.meta)}</div>`).join('')}
                 </div>
               ` : ''}
             ` : `
@@ -1305,7 +1355,7 @@ const Pages = (() => {
                   </div>
                 </div>`;
               }).join('') : `
-                <div class="empty-state"><p>Nenhuma meta ainda — crie a primeira!</p></div>
+                <div class="empty-state"><p>Nenhuma meta ainda. Crie a primeira!</p></div>
               `}
             `}
           </div>
@@ -1505,10 +1555,10 @@ const Pages = (() => {
 
         <!-- Legenda do semáforo -->
         <div class="sem-legenda">
-          <div class="sem-leg-item"><span class="sem-leg-dot" style="background:#27AE60"></span> Verde — saudável (score ≥ 75)</div>
-          <div class="sem-leg-item"><span class="sem-leg-dot" style="background:#F1C40F"></span> Amarelo — atenção (50–74)</div>
-          <div class="sem-leg-item"><span class="sem-leg-dot" style="background:#E07B39"></span> Laranja — preocupante (25–49)</div>
-          <div class="sem-leg-item"><span class="sem-leg-dot" style="background:#C0392B"></span> Vermelho — crítico (0–24)</div>
+          <div class="sem-leg-item"><span class="sem-leg-dot" style="background:#27AE60"></span> Verde: saudável (score ≥ 75)</div>
+          <div class="sem-leg-item"><span class="sem-leg-dot" style="background:#F1C40F"></span> Amarelo: atenção (50–74)</div>
+          <div class="sem-leg-item"><span class="sem-leg-dot" style="background:#E07B39"></span> Laranja: preocupante (25–49)</div>
+          <div class="sem-leg-item"><span class="sem-leg-dot" style="background:#C0392B"></span> Vermelho: crítico (0–24)</div>
         </div>
 
         <!-- Alertas individuais -->
@@ -1543,7 +1593,7 @@ const Pages = (() => {
         ` : ''}
 
         <!-- ══ GRÁFICO RENDA vs GASTOS ══ -->
-        <p class="section-title">Renda × Gastos — Últimos 6 Meses</p>
+        <p class="section-title">Renda × Gastos nos Últimos 6 Meses</p>
         <div class="card mb-12">
           <div class="card-body">
             <div class="rel-legend">
@@ -1568,7 +1618,7 @@ const Pages = (() => {
         </div>
 
         <!-- ══ GRÁFICO RECEITAS × DÍVIDAS (barras) COM DESPESAS (linha) ══ -->
-        <p class="section-title">Receitas × Dívidas — com Despesas em Linha — Últimos 6 Meses</p>
+        <p class="section-title">Receitas × Dívidas com Despesas em Linha (Últimos 6 Meses)</p>
         <div class="card mb-12">
           <div class="card-body">
             <div class="rel-legend">
@@ -1598,7 +1648,7 @@ const Pages = (() => {
         </div>
 
         <!-- ══ RENDA vs GASTOS (mês atual) ══ -->
-        <p class="section-title">Mês Atual — Composição da Renda</p>
+        <p class="section-title">Composição da Renda no Mês Atual</p>
         <div class="card mb-12"><div class="card-body">
 
           <!-- Joelson -->
@@ -1825,7 +1875,7 @@ const Pages = (() => {
         </div>
 
         <!-- RESUMO EXECUTIVO -->
-        <p class="section-title">Resumo — ${nomeMesSel} ${anoSel}</p>
+        <p class="section-title">Resumo de ${nomeMesSel} ${anoSel}</p>
         <div class="kpi-grid">
           <div class="kpi-card kpi-green">
             <div class="kpi-label">Receitas</div>
@@ -1849,7 +1899,7 @@ const Pages = (() => {
         </div>
 
         <!-- GRÁFICO DE BARRAS HISTÓRICO (últimos 6 meses) -->
-        <p class="section-title">Histórico — Últimos 6 Meses</p>
+        <p class="section-title">Histórico dos Últimos 6 Meses</p>
         <div class="card mb-12">
           <div class="card-body">
             <div class="rel-legend">
@@ -1911,7 +1961,7 @@ const Pages = (() => {
         </div>
 
         <!-- RECEITAS DETALHADAS -->
-        <p class="section-title">Entradas — ${nomeMesSel}</p>
+        <p class="section-title">Entradas de ${nomeMesSel}</p>
         ${recMes.length ? `<div class="table-wrap mb-12">
           <table>
             <thead><tr><th>Data</th><th>Descrição</th><th>Responsável</th><th class="text-right">Valor</th></tr></thead>
@@ -1928,7 +1978,7 @@ const Pages = (() => {
         </div>` : '<div class="empty-state" style="padding:24px"><p>Sem receitas neste período</p></div>'}
 
         <!-- DESPESAS DETALHADAS -->
-        <p class="section-title">Saídas — ${nomeMesSel}</p>
+        <p class="section-title">Saídas de ${nomeMesSel}</p>
         ${despMes.length ? `<div class="table-wrap mb-12">
           <table>
             <thead><tr><th>Data</th><th>Descrição</th><th>Para</th><th>Categoria</th><th class="text-right">Valor</th></tr></thead>
@@ -2101,7 +2151,7 @@ const Pages = (() => {
         ${r.catsSorted.map(([cat,val]) => {
           const meta = r.orc.find(o => o.cat === cat)?.meta || 0;
           const over = meta > 0 && val > meta;
-          return `<tr><td>${cat}</td><td class="tr${over ? ' red' : ''}">${fmt(val)}</td><td class="tr">${meta > 0 ? fmt(meta) : '—'}</td></tr>`;
+          return `<tr><td>${cat}</td><td class="tr${over ? ' red' : ''}">${fmt(val)}</td><td class="tr">${meta > 0 ? fmt(meta) : '-'}</td></tr>`;
         }).join('')}
       </tbody></table>`;
       membrosHTML = `<div class="sec">Gastos por Membro</div><table><thead><tr><th>Membro</th><th class="tr">Valor</th></tr></thead><tbody>
@@ -2111,7 +2161,7 @@ const Pages = (() => {
 
     let graficoHistHTML = '';
     if (opts.graficos && temRecDesp) {
-      graficoHistHTML = `<div class="sec">Histórico — Últimos 6 Meses (Receitas × Despesas)</div>
+      graficoHistHTML = `<div class="sec">Histórico dos Últimos 6 Meses (Receitas × Despesas)</div>
         <div class="legend"><span class="dot" style="background:#1E7B45"></span>Receitas &nbsp; <span class="dot" style="background:#C0392B"></span>Despesas</div>
         ${svgGroupedBars(r.hist, [{key:'rec',color:'#1E7B45'},{key:'desp',color:'#C0392B'}], null, r.histMax)}`;
     }
@@ -2119,23 +2169,23 @@ const Pages = (() => {
     let graficoDividasHTML = '';
     if (opts.graficos && opts.dividas) {
       const maxDiv = Math.max(...r.histDiv.map(h => Math.max(h.rec, h.divida, h.desp)), 1);
-      graficoDividasHTML = `<div class="sec">Receitas × Dívidas — com Despesas em Linha</div>
+      graficoDividasHTML = `<div class="sec">Receitas × Dívidas com Despesas em Linha</div>
         <div class="legend"><span class="dot" style="background:#1E7B45"></span>Receitas &nbsp; <span class="dot" style="background:#BF9000"></span>Parcelas de Dívida &nbsp; <span class="dot" style="background:#1F3864"></span>Despesas (linha)</div>
         ${svgGroupedBars(r.histDiv, [{key:'rec',color:'#1E7B45'},{key:'divida',color:'#BF9000'}], {key:'desp',color:'#1F3864'}, maxDiv)}`;
     }
 
-    const tabRecHTML = opts.receitas ? `<div class="sec">Receitas Detalhadas — ${titulo}</div>
+    const tabRecHTML = opts.receitas ? `<div class="sec">Receitas Detalhadas de ${titulo}</div>
       ${r.recMes.length ? `<table><thead><tr><th>Data</th><th>Descrição</th><th>Responsável</th><th class="tr">Valor</th></tr></thead><tbody>
         ${[...r.recMes].sort((a,b)=>b.data.localeCompare(a.data)).map(x => `<tr><td>${fmtDate(x.data)}</td><td>${x.desc}</td><td>${x.resp}</td><td class="tr green">+${fmt(x.valor)}</td></tr>`).join('')}
       </tbody><tfoot><tr><td colspan="3">Total Receitas</td><td class="tr">${fmt(r.totRec)}</td></tr></tfoot></table>` : '<p>Sem receitas neste período.</p>'}` : '';
 
-    const tabDespHTML = opts.despesas ? `<div class="sec">Despesas Detalhadas — ${titulo}</div>
+    const tabDespHTML = opts.despesas ? `<div class="sec">Despesas Detalhadas de ${titulo}</div>
       ${r.despMes.length ? `<table><thead><tr><th>Data</th><th>Descrição</th><th>Para</th><th>Categoria</th><th class="tr">Valor</th></tr></thead><tbody>
         ${[...r.despMes].sort((a,b)=>b.data.localeCompare(a.data)).map(x => `<tr><td>${fmtDate(x.data)}</td><td>${x.desc}</td><td>${x.para}</td><td>${x.cat}</td><td class="tr red">-${fmt(x.valor)}</td></tr>`).join('')}
       </tbody><tfoot><tr><td colspan="4">Total Despesas</td><td class="tr">${fmt(r.totDesp)}</td></tr></tfoot></table>` : '<p>Sem despesas neste período.</p>'}` : '';
 
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Relatório ${titulo}</title>${style}</head><body>
-      <h1>Relatório — ${titulo}</h1>
+      <h1>Relatório de ${titulo}</h1>
       <div class="sub">Família: Joelson, Raquel, Davi e Luísa · Gerado em ${new Date().toLocaleDateString('pt-BR')}</div>
       ${kpiHTML}
       ${dividasKpiHTML}
