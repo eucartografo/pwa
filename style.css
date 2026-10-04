@@ -205,7 +205,7 @@ a { color: var(--blue); text-decoration: none; }
 .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; min-width: 0; }
 @media (min-width: 640px) { .kpi-grid { grid-template-columns: repeat(4, 1fr); } }
 .kpi-card {
-  border-radius: var(--radius-md); padding: 16px; color: var(--white);
+  border-radius: var(--radius-md); padding: 14px; color: var(--white);
   display: flex; flex-direction: column; gap: 4px;
   /* Sem isso, um card com texto longo (ex: "R$ 1.050,63") empurra a coluna
      do grid além da largura disponível, e a página inteira vira scrollável
@@ -213,7 +213,9 @@ a { color: var(--blue); text-decoration: none; }
   min-width: 0;
 }
 .kpi-label { font-size: 11px; font-weight: 600; opacity: .85; text-transform: uppercase; letter-spacing: .5px; }
-.kpi-value { font-size: 20px; font-weight: 700; line-height: 1.1; overflow-wrap: break-word; }
+/* clamp() em vez de quebrar a palavra: o valor encolhe pra caber inteiro
+   numa linha (nunca parte "R$ 1.500,00" ao meio, tipo "R$ 1.50" / "0,00") */
+.kpi-value { font-size: clamp(13px, 4.3vw, 20px); font-weight: 700; line-height: 1.15; white-space: nowrap; }
 .kpi-sub { font-size: 11px; opacity: .75; }
 .kpi-green  { background: linear-gradient(135deg, var(--green), #27ae60); }
 .kpi-red    { background: linear-gradient(135deg, var(--red), #e74c3c); }

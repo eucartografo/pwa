@@ -302,7 +302,7 @@ const Pages = (() => {
                   <div style="font-weight:600;font-size:13px">${d.desc}</div>
                   <div style="font-size:11px;color:var(--gray-500)">${d.resp} · ${d.pagas}/${d.nParc} pagas · ${fmt(d.parcela)}/mês</div>
                 </div>
-                <button class="btn btn-success btn-sm" onclick="Pages.registrarPagamentoDivida(${d._row},${d.pagas},${d.nParc})">✓ Marcar paga</button>
+                <button class="btn btn-success btn-sm" onclick="Pages.registrarPagamentoDivida(${d._row},${d.pagas},${d.nParc},'${d.desc.replace(/'/g,"\\'")}')">✓ Marcar paga</button>
               </div>
             `).join('')}
           </div></div>
@@ -1036,13 +1036,17 @@ const Pages = (() => {
             <div class="mt-8 progress-bar"><div class="progress-fill" style="width:${pct*100}%"></div></div>
             <div class="meta-values"><span>${fmt(d.pagas * d.parcela)} pago</span><span>Restante: ${fmt(devedor)}</span></div>
             <div class="mt-8 flex gap-8" style="justify-content:flex-end">
-              <button class="btn btn-ghost btn-sm" onclick="Pages.registrarPagamentoDivida(${d._row},${d.pagas},${d.nParc})">Registrar parcela</button>
+              <button class="btn btn-ghost btn-sm" onclick="Pages.registrarPagamentoDivida(${d._row},${d.pagas},${d.nParc},'${d.desc.replace(/'/g,"\\'")}')">Registrar parcela</button>
               <button class="btn btn-ghost btn-sm" onclick="Pages.editarDivida(${d._row})">Editar</button>
               <button class="btn btn-ghost btn-sm" onclick="Pages.deletarLancamento('${CONFIG.SHEETS.DIVIDAS}',${d._row})">Excluir</button>
             </div>
           </div>
         </div>`;
       }).join('') : '<div class="empty-state"><p>Nenhuma dívida cadastrada 🎉</p></div>'}
+
+      <button class="btn-fab" onclick="Pages.openNovaDivida()">
+        <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+      </button>
     `;
   }
 
@@ -1147,16 +1151,31 @@ const Pages = (() => {
     } catch(e) { console.error(e); }
   }
 
-  async function registrarPagamentoDivida(row, pagas, nParc) {
+  // Pede confirmação antes de marcar a parcela como paga — evita remoção/
+  // alteração por toque acidental (ex: celular no bolso), já que essa ação
+  // muda o progresso da dívida direto na planilha.
+  function registrarPagamentoDivida(row, pagas, nParc, desc = '') {
     if (pagas >= nParc) return toast('Dívida já quitada!', 'success');
-    await Sheets.update(CONFIG.SHEETS.DIVIDAS, `F${row}`, [[pagas + 1]]);
-    const quitouAgora = pagas + 1 >= nParc;
-    lancarConfete(quitouAgora ? 100 : 55);
-    tocarSomSucesso(quitouAgora);
-    toast(quitouAgora ? 'Dívida quitada! 🎉' : 'Parcela registrada!', 'success');
-    const active = document.querySelector('.page.active');
-    if (active?.id === 'page-painel') renderPainel(active);
-    else if (active?.id === 'page-dividas') renderDividas(active);
+    const proxima = pagas + 1;
+    const quitaAgora = proxima >= nParc;
+    openModal('Confirmar pagamento', `
+      <p class="text-sm" style="line-height:1.5">
+        Confirma que a parcela <strong>${proxima}/${nParc}</strong>${desc ? ` de "${desc}"` : ''} foi paga?
+        ${quitaAgora ? '<br><br>Essa é a última parcela: a dívida será marcada como quitada.' : ''}
+      </p>
+    `, [
+      { label: 'Cancelar', cls: 'btn-ghost', action: async () => { closeModal(); } },
+      { label: 'Confirmar pagamento', cls: 'btn-success', action: async () => {
+        await Sheets.update(CONFIG.SHEETS.DIVIDAS, `F${row}`, [[proxima]]);
+        closeModal();
+        lancarConfete(quitaAgora ? 100 : 55);
+        tocarSomSucesso(quitaAgora);
+        toast(quitaAgora ? 'Dívida quitada! 🎉' : 'Parcela registrada!', 'success');
+        const active = document.querySelector('.page.active');
+        if (active?.id === 'page-painel') renderPainel(active);
+        else if (active?.id === 'page-dividas') renderDividas(active);
+      }}
+    ]);
   }
 
   // ─── METAS ────────────────────────────────────────────

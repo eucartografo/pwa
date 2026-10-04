@@ -164,7 +164,7 @@ Contém um renderer para cada página. Todas as funções recebem o elemento `el
 | `renderDespesas(el)` | Seletor de mês/ano, busca, filtro por pessoa, ordenação Data/A-Z, edição e exclusão com confirmação, mostra quem lançou |
 | `renderOrcamento(el)` | Meta vs realizado por categoria com barras de progresso |
 | `renderCartao(el)` | Fatura atual calculada automaticamente das despesas, edição de limite/vencimento |
-| `renderDividas(el)` | Filtro por responsável, cards de dívidas com progresso, edição, registro de parcelas |
+| `renderDividas(el)` | Filtro por responsável, cards de dívidas com progresso, edição, registro de parcelas com confirmação e confete, botão flutuante de nova dívida |
 | `renderMetas(el)` | **Sistema de 3 níveis** — Dívidas → Reserva → Metas livres |
 | `renderRelatorio(el)` | Relatório mensal com seletor de período e exportação (PDF ou CSV, seções selecionáveis) |
 
@@ -350,6 +350,7 @@ git push
 | v12 | Painel responde "Para onde foi meu dinheiro": gráfico de rosca por categoria com comparação ao mês anterior, e destaque do maior gasto do mês |
 | v13 | Auditoria de código (5 bugs corrigidos) + revisão visual do Painel: bloco "Para Onde Foi Seu Dinheiro" movido para o topo da tela com frase-resumo e donut maior; KPIs secundários (saldo em contas, acumulado, reserva, por pessoa, dívidas) convertidos em `stat-chip`s compactos para reduzir a "parede de cards coloridos" e focar a atenção na resposta da pergunta |
 | v14 | Fix: SVG do donut renderizando 20×20px (regra global `svg{}` sobrescrevia o tamanho); fix: cards de KPI sem `min-width:0` causavam overflow horizontal da página inteira ao deslizar; confete + som (Web Audio API) ao marcar parcela de dívida como paga; revisão de pontuação em todo o texto do app (travessões `—` substituídos por vírgula, dois-pontos ou nova frase, conforme o contexto) |
+| v15 | Fix: valor do KPI quebrando no meio do número em telas estreitas (trocado `overflow-wrap: break-word` por `clamp()` de fonte); confirmação obrigatória antes de marcar parcela de dívida como paga (evita toque acidental); botão flutuante (FAB) de "Nova Dívida" na aba Dívidas, igual Receitas/Despesas |
 
 ---
 
