@@ -351,6 +351,7 @@ git push
 | v13 | Auditoria de código (5 bugs corrigidos) + revisão visual do Painel: bloco "Para Onde Foi Seu Dinheiro" movido para o topo da tela com frase-resumo e donut maior; KPIs secundários (saldo em contas, acumulado, reserva, por pessoa, dívidas) convertidos em `stat-chip`s compactos para reduzir a "parede de cards coloridos" e focar a atenção na resposta da pergunta |
 | v14 | Fix: SVG do donut renderizando 20×20px (regra global `svg{}` sobrescrevia o tamanho); fix: cards de KPI sem `min-width:0` causavam overflow horizontal da página inteira ao deslizar; confete + som (Web Audio API) ao marcar parcela de dívida como paga; revisão de pontuação em todo o texto do app (travessões `—` substituídos por vírgula, dois-pontos ou nova frase, conforme o contexto) |
 | v15 | Fix: valor do KPI quebrando no meio do número em telas estreitas (trocado `overflow-wrap: break-word` por `clamp()` de fonte); confirmação obrigatória antes de marcar parcela de dívida como paga (evita toque acidental); botão flutuante (FAB) de "Nova Dívida" na aba Dívidas, igual Receitas/Despesas |
+| v16 | Fix crítico: botão "+" de Receitas/Despesas não fazia nada — `_despDataSugestao`/`_recDataSugestao` eram chamadas no HTML (`onclick="Pages._despDataSugestao()"`) mas nunca tinham sido adicionadas à lista de exports do módulo `Pages`, então a chamada lançava um erro silencioso (`TypeError: ... is not a function`) antes mesmo de abrir o formulário |
 
 ---
 

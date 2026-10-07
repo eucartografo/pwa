@@ -2292,8 +2292,8 @@ const Pages = (() => {
     openNovaMetaReserva, openEditarContas, openEditarOrcamento, openAtualizarMeta,
     registrarPagamentoDivida, deletarLancamento, openModal, closeModal, toast,
     _toggleParcelado, _calcImpactoParc, _calcImpactoDivida, editarCartao,
-    editarReceita, _recChangePeriodo, _recSetFiltro, _recSetBusca, _recToggleSort,
-    editarDespesa, _despChangePeriodo, _despSetFiltro, _despSetBusca, _despToggleSort,
+    editarReceita, _recChangePeriodo, _recSetFiltro, _recSetBusca, _recToggleSort, _recDataSugestao,
+    editarDespesa, _despChangePeriodo, _despSetFiltro, _despSetBusca, _despToggleSort, _despDataSugestao,
     editarDivida, _divSetFiltro,
   };
 })();
