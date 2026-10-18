@@ -52,5 +52,7 @@ const CONFIG = {
     CARTAO:    'CARTÃO',
     DIVIDAS:   'DÍVIDAS',
     METAS:     'METAS',
+    DESEJOS:   'DESEJOS',
+    CONTAS_FIXAS: 'CONTAS_FIXAS',
   }
 };

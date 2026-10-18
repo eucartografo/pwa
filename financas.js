@@ -240,10 +240,73 @@ const Financas = (() => {
     return hist;
   }
 
+  // ─── Vencimento de dívida (pagamento mensal) ──────────
+  // Mesmo motor validado no app de Trabalhos (Urgencia.calcular): nunca
+  // confia num campo "status" salvo — recalcula sempre a partir de hoje.
+  const VENC_URGENTE = 5;  // dias
+  const VENC_ATENCAO = 15; // dias
+
+  // Parse de data ISO "YYYY-MM-DD" como meia-noite LOCAL — evita o bug já
+  // visto de `new Date(str)` interpretar como UTC e deslocar o dia.
+  function _parseDataLocal(iso) {
+    if (!iso) return null;
+    const [y, m, d] = iso.split('-').map(Number);
+    if (!y || !m || !d) return null;
+    return new Date(y, m - 1, d);
+  }
+  function _hojeLocal() {
+    const h = new Date();
+    return new Date(h.getFullYear(), h.getMonth(), h.getDate());
+  }
+
+  // Classifica uma contagem de dias (negativo = já passou) em bucket de
+  // urgência — única fonte da cascata de limiares/cores/frases, usada tanto
+  // por dívida (data única) quanto por conta fixa (recorrente por dia do
+  // mês), pra não divergirem se o limiar/texto mudar no futuro.
+  function _bucketDeDias(dias) {
+    if (dias < 0)                   return { bucket: 'vencido', cor: '--red',    frase: `Vencido há ${Math.abs(dias)} dia${Math.abs(dias)===1?'':'s'}` };
+    if (dias <= VENC_URGENTE)       return { bucket: 'urgente', cor: '--red',    frase: dias === 0 ? 'Vence hoje' : `Vence em ${dias} dia${dias===1?'':'s'}` };
+    if (dias <= VENC_ATENCAO)       return { bucket: 'atencao', cor: '--orange', frase: `Vence em ${dias} dias` };
+    return                                 { bucket: 'emDia',   cor: '--green',  frase: `Vence em ${dias} dias` };
+  }
+
+  function calcVencimentoDivida(dataVencimento) {
+    const venc = _parseDataLocal(dataVencimento);
+    if (!venc) return null;
+    const dias = Math.round((venc - _hojeLocal()) / 86400000); // negativo = já passou
+    return { dias, ..._bucketDeDias(dias) };
+  }
+
+  // ─── Vencimento de conta fixa (água, luz, internet, cartão...) ────────
+  // Diferente da dívida (data única por parcela), aqui o vencimento é
+  // recorrente: "todo dia X do mês". Calcula sempre o ciclo do mês atual —
+  // "pago" só conta se o último pagamento caiu dentro desse mesmo mês,
+  // nunca um status salvo à parte.
+  function _ultimoDiaDoMes(ano, mesIndex0) {
+    return new Date(ano, mesIndex0 + 1, 0).getDate();
+  }
+
+  function calcVencimentoContaFixa(diaVencimento, ultimoPagamento) {
+    if (!diaVencimento) return null;
+    const hoje = _hojeLocal();
+    const diaClamp = Math.min(diaVencimento, _ultimoDiaDoMes(hoje.getFullYear(), hoje.getMonth()));
+    const vencCiclo = new Date(hoje.getFullYear(), hoje.getMonth(), diaClamp);
+
+    const up = ultimoPagamento ? _parseDataLocal(ultimoPagamento) : null;
+    const pago = up && up.getFullYear() === hoje.getFullYear() && up.getMonth() === hoje.getMonth();
+    if (pago) {
+      return { dias: null, bucket: 'pago', cor: '--green', frase: `Pago em ${String(up.getDate()).padStart(2,'0')}/${String(up.getMonth()+1).padStart(2,'0')}` };
+    }
+
+    const dias = Math.round((vencCiclo - hoje) / 86400000);
+    return { dias, ..._bucketDeDias(dias) };
+  }
+
   return {
     calcRendaMensal, calcGastosMensal, calcGastosPorCategoria, calcParcelasAtivas,
     calcSemaforo, alertaComprometimento, calcImpactoNovaParcela,
     calcHistorico, calcHistoricoComDividas, filtrarPeriodo, mesAtual, anoAtual, mesAnterior,
+    calcVencimentoDivida, calcVencimentoContaFixa,
     LIMITE_COMPROMETIMENTO, LIMITE_CRITICO, META_POUPANCA,
   };
 })();

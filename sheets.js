@@ -86,7 +86,13 @@ const Sheets = (() => {
       // initSpreadsheet() roda a cada login E a cada renovação silenciosa de
       // token (a cada 50min, enquanto o app ficar aberto) — só tenta migrar
       // uma vez por sessão, não indefinidamente.
-      if (!_migrouLancadoPor) { await migrarColunaLancadoPor(); _migrouLancadoPor = true; }
+      if (!_migrouLancadoPor) {
+        await migrarColunaLancadoPor();
+        await migrarVencimentoDividas();
+        await criarAbaDesejosSeNaoExistir();
+        await criarAbaContasFixasSeNaoExistir();
+        _migrouLancadoPor = true;
+      }
     } catch {
       // Cria todas as abas via batchUpdate
       await createAllSheets();
@@ -109,6 +115,49 @@ const Sheets = (() => {
     } catch(e) { console.warn('Migração LANÇADO_POR:', e); }
   }
 
+  // Dívidas cadastradas antes do campo de vencimento existir não têm essas
+  // colunas — adiciona o cabeçalho automaticamente, sem apagar nada.
+  async function migrarVencimentoDividas() {
+    try {
+      const head = await read(CONFIG.SHEETS.DIVIDAS, 'H1');
+      if (!head.length) await update(CONFIG.SHEETS.DIVIDAS, 'H1:I1', [['PAGAMENTO_MENSAL', 'PROXIMO_VENCIMENTO']]);
+    } catch(e) { console.warn('Migração vencimento dívidas:', e); }
+  }
+
+  // Cria a aba DESEJOS (Nível 4 — lista de desejos) se a planilha for de
+  // antes dessa aba existir.
+  async function criarAbaDesejosSeNaoExistir() {
+    try {
+      await read(CONFIG.SHEETS.DESEJOS, 'A1');
+    } catch {
+      try {
+        const url = `${BASE}/${CONFIG.SPREADSHEET_ID}:batchUpdate`;
+        await fetch(url, {
+          method: 'POST', headers: headers(),
+          body: JSON.stringify({ requests: [{ addSheet: { properties: { title: CONFIG.SHEETS.DESEJOS } } }] })
+        });
+        await update(CONFIG.SHEETS.DESEJOS, 'A1', [['ID', 'ITEM', 'VALOR_ESTIMADO', 'DATA_CADASTRO', 'LIBERADO_EM', 'OBSERVACAO']]);
+      } catch(e) { console.warn('Criação aba DESEJOS:', e); }
+    }
+  }
+
+  // Cria a aba CONTAS_FIXAS (contas recorrentes com vencimento mensal —
+  // água, luz, internet, cartão etc.) se a planilha for de antes dela existir.
+  async function criarAbaContasFixasSeNaoExistir() {
+    try {
+      await read(CONFIG.SHEETS.CONTAS_FIXAS, 'A1');
+    } catch {
+      try {
+        const url = `${BASE}/${CONFIG.SPREADSHEET_ID}:batchUpdate`;
+        await fetch(url, {
+          method: 'POST', headers: headers(),
+          body: JSON.stringify({ requests: [{ addSheet: { properties: { title: CONFIG.SHEETS.CONTAS_FIXAS } } }] })
+        });
+        await update(CONFIG.SHEETS.CONTAS_FIXAS, 'A1', [['ID', 'DESCRICAO', 'CATEGORIA', 'VALOR_ESTIMADO', 'DIA_VENCIMENTO', 'PARA_QUEM', 'FORMA_PGTO', 'ULTIMO_PAGAMENTO', 'ATIVA', 'OBSERVACAO']]);
+      } catch(e) { console.warn('Criação aba CONTAS_FIXAS:', e); }
+    }
+  }
+
   async function createAllSheets() {
     const sheetDefs = [
       { name: CONFIG.SHEETS.CONTAS,    headers: ['CONTA','RESPONSÁVEL','SALDO'] },
@@ -116,8 +165,10 @@ const Sheets = (() => {
       { name: CONFIG.SHEETS.DESPESAS,  headers: ['ID','DATA','DESCRIÇÃO','CATEGORIA','PARA_QUEM','CONTA','FORMA_PGTO','VALOR','LANÇADO_POR'] },
       { name: CONFIG.SHEETS.ORCAMENTO, headers: ['CATEGORIA','META_MENSAL'] },
       { name: CONFIG.SHEETS.CARTAO,    headers: ['CARTÃO','TITULAR','LIMITE','DIA_VENC'] },
-      { name: CONFIG.SHEETS.DIVIDAS,   headers: ['DESCRIÇÃO','RESPONSÁVEL','VALOR_TOTAL','PARCELA','N_PARCELAS','PAGAS','DATA_INICIO'] },
+      { name: CONFIG.SHEETS.DIVIDAS,   headers: ['DESCRIÇÃO','RESPONSÁVEL','VALOR_TOTAL','PARCELA','N_PARCELAS','PAGAS','DATA_INICIO','PAGAMENTO_MENSAL','PROXIMO_VENCIMENTO'] },
       { name: CONFIG.SHEETS.METAS,     headers: ['OBJETIVO','META','GUARDADO','APORTE_MENSAL','OBSERVAÇÃO'] },
+      { name: CONFIG.SHEETS.DESEJOS,   headers: ['ID','ITEM','VALOR_ESTIMADO','DATA_CADASTRO','LIBERADO_EM','OBSERVACAO'] },
+      { name: CONFIG.SHEETS.CONTAS_FIXAS, headers: ['ID','DESCRICAO','CATEGORIA','VALOR_ESTIMADO','DIA_VENCIMENTO','PARA_QUEM','FORMA_PGTO','ULTIMO_PAGAMENTO','ATIVA','OBSERVACAO'] },
     ];
 
     // Adiciona as abas
@@ -212,7 +263,33 @@ const Sheets = (() => {
       parcela: parseFloat((r[3]||'0').toString().replace(',','.')) || 0,
       nParc: parseInt(r[4]) || 0,
       pagas: parseInt(r[5]) || 0,
-      inicio: r[6] || ''
+      inicio: r[6] || '',
+      pagamentoMensal: (r[7] || '').trim() === 'Sim',
+      proximoVencimento: r[8] || '',
+    }));
+  }
+
+  function parseDesejos(rows) {
+    if (!rows.length) return [];
+    return rows.slice(1).filter(r => r[0]).map((r, i) => ({
+      _row: i + 2,
+      id: r[0] || '', item: r[1] || '',
+      valorEstimado: parseFloat((r[2]||'0').toString().replace(',','.')) || 0,
+      dataCadastro: r[3] || '', liberadoEm: r[4] || '', obs: r[5] || '',
+    }));
+  }
+
+  function parseContasFixas(rows) {
+    if (!rows.length) return [];
+    return rows.slice(1).filter(r => r[0]).map((r, i) => ({
+      _row: i + 2,
+      id: r[0] || '', desc: r[1] || '', cat: r[2] || '',
+      valorEstimado: parseFloat((r[3]||'0').toString().replace(',','.')) || 0,
+      diaVenc: parseInt(r[4]) || 0,
+      paraQuem: r[5] || '', forma: r[6] || '',
+      ultimoPagamento: r[7] || '',
+      ativa: (r[8] || 'Sim').trim() !== 'Não',
+      obs: r[9] || '',
     }));
   }
 
@@ -242,6 +319,6 @@ const Sheets = (() => {
     setToken, read, readAll, append, update, deleteRow,
     initSpreadsheet,
     parseReceitas, parseDespesas, parseContas, parseOrcamento,
-    parseDividas, parseMetas, parseCartoes
+    parseDividas, parseMetas, parseCartoes, parseDesejos, parseContasFixas
   };
 })();

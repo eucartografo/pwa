@@ -87,6 +87,10 @@
         <svg viewBox="0 0 24 24"><path d="M11.5 2C6.81 2 3 5.81 3 10.5S6.81 19 11.5 19h.5v3c4.86-2.34 8-7 8-11.5C20 5.81 16.19 2 11.5 2zm1 14.5h-2v-2h2v2zm0-4h-2c0-3.25 3-3 3-5 0-1.1-.9-2-2-2s-2 .9-2 2h-2c0-2.21 1.79-4 4-4s4 1.79 4 4c0 2.5-3 2.75-3 5z"/></svg>
         Dívidas
       </button>
+      <button class="nav-item" data-page="contasfixas">
+        <svg viewBox="0 0 24 24"><path d="M18 17H6v-2h12v2zm0-4H6v-2h12v2zm0-4H6V7h12v2zM3 22l1.5-1.5L6 22l1.5-1.5L9 22l1.5-1.5L12 22l1.5-1.5L15 22l1.5-1.5L18 22l1.5-1.5L21 22V2l-1.5 1.5L18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2 4.5 3.5 3 2v20z"/></svg>
+        Contas Fixas
+      </button>
       <button class="nav-item" data-page="metas">
         <svg viewBox="0 0 24 24"><path d="M19.07 4.93l-1.41 1.41C19.1 7.79 20 9.79 20 12c0 4.42-3.58 8-8 8s-8-3.58-8-8c0-4.07 3.03-7.44 7-7.93V6.1C7.21 6.58 5 9.07 5 12c0 3.87 3.13 7 7 7s7-3.13 7-7c0-1.93-.78-3.68-2.04-4.95zM13 1h-2v10.59l3.71 3.71 1.41-1.41L13 10.17V1z"/></svg>
         Metas
@@ -146,6 +150,10 @@
           <svg viewBox="0 0 24 24"><path d="M11.5 2C6.81 2 3 5.81 3 10.5S6.81 19 11.5 19h.5v3c4.86-2.34 8-7 8-11.5C20 5.81 16.19 2 11.5 2z"/></svg>
           Dívidas
         </button>
+        <button class="perfil-menu-item" onclick="App.togglePerfilMenu(); App.navigateTo('contasfixas')">
+          <svg viewBox="0 0 24 24"><path d="M18 17H6v-2h12v2zm0-4H6v-2h12v2zm0-4H6V7h12v2zM3 22l1.5-1.5L6 22l1.5-1.5L9 22l1.5-1.5L12 22l1.5-1.5L15 22l1.5-1.5L18 22l1.5-1.5L21 22V2l-1.5 1.5L18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2 4.5 3.5 3 2v20z"/></svg>
+          Contas Fixas
+        </button>
         <button class="perfil-menu-item" onclick="App.togglePerfilMenu(); App.navigateTo('orcamento')">
           <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
           Orçamento
@@ -172,6 +180,7 @@
       <div id="page-orcamento" class="page"></div>
       <div id="page-cartao" class="page"></div>
       <div id="page-dividas" class="page"></div>
+      <div id="page-contasfixas" class="page"></div>
       <div id="page-metas" class="page"></div>
       <div id="page-relatorio" class="page"></div>
     </div>

@@ -302,7 +302,7 @@ const Pages = (() => {
                   <div style="font-weight:600;font-size:13px">${d.desc}</div>
                   <div style="font-size:11px;color:var(--gray-500)">${d.resp} · ${d.pagas}/${d.nParc} pagas · ${fmt(d.parcela)}/mês</div>
                 </div>
-                <button class="btn btn-success btn-sm" onclick="Pages.registrarPagamentoDivida(${d._row},${d.pagas},${d.nParc},'${d.desc.replace(/'/g,"\\'")}')">✓ Marcar paga</button>
+                <button class="btn btn-success btn-sm" onclick="Pages.registrarPagamentoDivida(${d._row},${d.pagas},${d.nParc},'${d.desc.replace(/'/g,"\\'")}',${d.pagamentoMensal},'${d.proximoVencimento||''}')">✓ Marcar paga</button>
               </div>
             `).join('')}
           </div></div>
@@ -992,6 +992,7 @@ const Pages = (() => {
 
   // ─── DÍVIDAS ──────────────────────────────────────────
   let _divCache = null;
+  let _desejosCache = null; // Nível 4 — lista de desejos
 
   async function renderDividas(el) {
     el.innerHTML = '<div class="skeleton skel-row"></div>'.repeat(3);
@@ -1026,6 +1027,8 @@ const Pages = (() => {
         const devedor = d.total - d.parcela * d.pagas;
         const pct = d.nParc > 0 ? d.pagas / d.nParc : 0;
         const status = d.pagas >= d.nParc ? 'Quitado' : 'Em andamento';
+        const venc = (status !== 'Quitado' && d.pagamentoMensal && d.proximoVencimento)
+          ? Financas.calcVencimentoDivida(d.proximoVencimento) : null;
         return `<div class="card mb-12">
           <div class="card-body">
             <div class="flex justify-between items-center">
@@ -1033,10 +1036,11 @@ const Pages = (() => {
               <span class="badge ${status === 'Quitado' ? 'badge-green' : 'badge-orange'}">${status}</span>
             </div>
             <div class="text-sm text-gray mt-4">${d.resp} · ${d.pagas}/${d.nParc} parcelas de ${fmt(d.parcela)}</div>
+            ${venc ? `<div class="text-xs mt-4" style="font-weight:600;color:var(${venc.cor})">⏰ ${venc.frase}</div>` : ''}
             <div class="mt-8 progress-bar"><div class="progress-fill" style="width:${pct*100}%"></div></div>
             <div class="meta-values"><span>${fmt(d.pagas * d.parcela)} pago</span><span>Restante: ${fmt(devedor)}</span></div>
             <div class="mt-8 flex gap-8" style="justify-content:flex-end">
-              <button class="btn btn-ghost btn-sm" onclick="Pages.registrarPagamentoDivida(${d._row},${d.pagas},${d.nParc},'${d.desc.replace(/'/g,"\\'")}')">Registrar parcela</button>
+              <button class="btn btn-ghost btn-sm" onclick="Pages.registrarPagamentoDivida(${d._row},${d.pagas},${d.nParc},'${d.desc.replace(/'/g,"\\'")}',${d.pagamentoMensal},'${d.proximoVencimento||''}')">Registrar parcela</button>
               <button class="btn btn-ghost btn-sm" onclick="Pages.editarDivida(${d._row})">Editar</button>
               <button class="btn btn-ghost btn-sm" onclick="Pages.deletarLancamento('${CONFIG.SHEETS.DIVIDAS}',${d._row})">Excluir</button>
             </div>
@@ -1088,6 +1092,17 @@ const Pages = (() => {
           <input class="form-control" type="number" id="div-pagas" min="0" value="${p.pagas ?? 0}"></div>
       </div>
       <div id="div-impacto-preview" class="impacto-preview" style="display:none"></div>
+
+      <div class="form-group"><label class="form-label">Pagamento mensal?</label>
+        <select class="form-control" id="div-pgto-mensal" onchange="Pages._toggleVencimento()">
+          <option value="Não" ${!p.pagamentoMensal ? 'selected' : ''}>Não</option>
+          <option value="Sim" ${p.pagamentoMensal ? 'selected' : ''}>Sim</option>
+        </select>
+      </div>
+      <div id="div-vencimento-wrap" style="display:${p.pagamentoMensal ? 'block' : 'none'}">
+        <div class="form-group"><label class="form-label">Próximo vencimento</label>
+          <input class="form-control" type="date" id="div-vencimento" value="${p.proximoVencimento || ''}"></div>
+      </div>
     `, [
       { label: isEdit ? 'Salvar Alterações' : 'Salvar', cls:'btn-primary', action: async () => {
         const desc   = document.getElementById('div-desc').value.trim();
@@ -1097,12 +1112,14 @@ const Pages = (() => {
         const parc   = parseFloat(document.getElementById('div-parcela').value) || 0;
         const nparc  = parseInt(document.getElementById('div-nparc').value) || 0;
         const pagas  = parseInt(document.getElementById('div-pagas').value) || 0;
+        const pgtoMensal  = document.getElementById('div-pgto-mensal').value;
+        const vencimento  = pgtoMensal === 'Sim' ? document.getElementById('div-vencimento').value : '';
         if (!desc || !total) return toast('Preencha os campos obrigatórios', 'error');
         if (isEdit) {
-          await Sheets.update(CONFIG.SHEETS.DIVIDAS, `A${p._row}:G${p._row}`, [[desc, resp, total, parc, nparc, pagas, inicio]]);
+          await Sheets.update(CONFIG.SHEETS.DIVIDAS, `A${p._row}:I${p._row}`, [[desc, resp, total, parc, nparc, pagas, inicio, pgtoMensal, vencimento]]);
           toast('Dívida atualizada!', 'success');
         } else {
-          await Sheets.append(CONFIG.SHEETS.DIVIDAS, [[desc, resp, total, parc, nparc, pagas, inicio]]);
+          await Sheets.append(CONFIG.SHEETS.DIVIDAS, [[desc, resp, total, parc, nparc, pagas, inicio, pgtoMensal, vencimento]]);
           toast('Dívida cadastrada!', 'success');
         }
         closeModal();
@@ -1113,6 +1130,12 @@ const Pages = (() => {
           renderPainel(document.getElementById('page-painel'));
       }}
     ]);
+  }
+
+  function _toggleVencimento() {
+    const sel = document.getElementById('div-pgto-mensal');
+    const wrap = document.getElementById('div-vencimento-wrap');
+    if (wrap) wrap.style.display = sel.value === 'Sim' ? 'block' : 'none';
   }
 
   async function _calcImpactoDivida() {
@@ -1154,19 +1177,62 @@ const Pages = (() => {
   // Pede confirmação antes de marcar a parcela como paga — evita remoção/
   // alteração por toque acidental (ex: celular no bolso), já que essa ação
   // muda o progresso da dívida direto na planilha.
-  function registrarPagamentoDivida(row, pagas, nParc, desc = '') {
+  function registrarPagamentoDivida(row, pagas, nParc, desc = '', pagamentoMensal = false, vencimentoAtual = '') {
     if (pagas >= nParc) return toast('Dívida já quitada!', 'success');
     const proxima = pagas + 1;
     const quitaAgora = proxima >= nParc;
+    // Sugestão de próximo vencimento = vencimento atual + 1 mês (editável) —
+    // não assume que vai se repetir certinho, é só um ponto de partida.
+    const sugestaoVenc = (() => {
+      if (!vencimentoAtual) return '';
+      const [y,m,d] = vencimentoAtual.split('-').map(Number);
+      let novoM = m + 1, novoY = y;
+      if (novoM > 12) { novoM = 1; novoY++; }
+      // Clampa ao último dia do mês de destino (ex: vencimento dia 31 de
+      // janeiro sugere 28/29 de fevereiro, não "3 de março" por overflow).
+      const ultimoDiaNovoMes = new Date(novoY, novoM, 0).getDate();
+      const novoD = Math.min(d, ultimoDiaNovoMes);
+      return `${novoY}-${String(novoM).padStart(2,'0')}-${String(novoD).padStart(2,'0')}`;
+    })();
+    const pedeVencimento = pagamentoMensal && !quitaAgora;
     openModal('Confirmar pagamento', `
       <p class="text-sm" style="line-height:1.5">
         Confirma que a parcela <strong>${proxima}/${nParc}</strong>${desc ? ` de "${desc}"` : ''} foi paga?
         ${quitaAgora ? '<br><br>Essa é a última parcela: a dívida será marcada como quitada.' : ''}
       </p>
+      ${pedeVencimento ? `
+        <div class="form-group mt-8"><label class="form-label">Próximo vencimento</label>
+          <input class="form-control" type="date" id="div-pag-prox-venc" value="${sugestaoVenc}"></div>
+      ` : ''}
     `, [
       { label: 'Cancelar', cls: 'btn-ghost', action: async () => { closeModal(); } },
       { label: 'Confirmar pagamento', cls: 'btn-success', action: async () => {
-        await Sheets.update(CONFIG.SHEETS.DIVIDAS, `F${row}`, [[proxima]]);
+        try {
+          await Sheets.update(CONFIG.SHEETS.DIVIDAS, `F${row}`, [[proxima]]);
+        } catch(e) {
+          toast('Erro ao registrar pagamento — tente novamente', 'error');
+          console.error(e);
+          return;
+        }
+        if (pedeVencimento) {
+          const novoVenc = document.getElementById('div-pag-prox-venc').value;
+          if (novoVenc) {
+            try {
+              await Sheets.update(CONFIG.SHEETS.DIVIDAS, `I${row}`, [[novoVenc]]);
+            } catch(e) {
+              // A parcela já foi registrada (passo acima deu certo) — só a
+              // data do próximo vencimento não salvou. Avisa em vez de
+              // reportar sucesso total ou deixar o erro silencioso.
+              toast('Parcela registrada, mas não consegui salvar a nova data de vencimento — edite a dívida pra corrigir', 'error');
+              console.error(e);
+              closeModal();
+              const activeErr = document.querySelector('.page.active');
+              if (activeErr?.id === 'page-painel') renderPainel(activeErr);
+              else if (activeErr?.id === 'page-dividas') renderDividas(activeErr);
+              return;
+            }
+          }
+        }
         closeModal();
         lancarConfete(quitaAgora ? 100 : 55);
         tocarSomSucesso(quitaAgora);
@@ -1178,16 +1244,157 @@ const Pages = (() => {
     ]);
   }
 
+  // ─── CONTAS FIXAS (água, luz, internet, cartão...) ─────
+  // Diferente de Dívidas: são recorrentes, sem fim — por isso vivem numa
+  // aba própria (CONTAS_FIXAS), não dentro de DÍVIDAS (que assume que a
+  // dívida um dia "quita"). "Marcar paga" já lança a despesa automaticamente,
+  // pra não precisar registrar a mesma conta duas vezes.
+  let _contasFixasCache = null;
+
+  async function renderContasFixas(el) {
+    el.innerHTML = '<div class="skeleton skel-row"></div>'.repeat(4);
+    try {
+      const rows = await Sheets.readAll(CONFIG.SHEETS.CONTAS_FIXAS);
+      _contasFixasCache = Sheets.parseContasFixas(rows).filter(c => c.ativa);
+      _renderContasFixasList(el);
+    } catch(e) { el.innerHTML = erro(e); console.error(e); }
+  }
+
+  function _renderContasFixasList(el) {
+    const contas = _contasFixasCache || [];
+    const comVenc = contas.map(c => ({ ...c, venc: Financas.calcVencimentoContaFixa(c.diaVenc, c.ultimoPagamento) }));
+    const ORDEM = { vencido: 0, urgente: 1, atencao: 2, emDia: 3, pago: 4 };
+    comVenc.sort((a,b) => (ORDEM[a.venc?.bucket] ?? 9) - (ORDEM[b.venc?.bucket] ?? 9));
+    const totalMensal = contas.reduce((s,c) => s + c.valorEstimado, 0);
+
+    el.innerHTML = `
+      <div class="kpi-grid" style="grid-template-columns:1fr">
+        <div class="kpi-card kpi-navy"><div class="kpi-label">Total de Contas Fixas / Mês</div><div class="kpi-value">${fmt(totalMensal)}</div></div>
+      </div>
+      <div class="flex justify-between items-center mb-12 mt-16">
+        <p class="section-title" style="margin:0">Contas Recorrentes</p>
+        <button class="btn btn-primary btn-sm" onclick="Pages.openNovaContaFixa()">+ Nova</button>
+      </div>
+      ${comVenc.length ? comVenc.map(c => `
+        <div class="card mb-12">
+          <div class="card-body">
+            <div class="flex justify-between items-center">
+              <strong>${c.desc}</strong>
+              ${c.venc ? `<span class="text-xs" style="font-weight:700;color:var(${c.venc.cor})">${c.venc.frase}</span>` : ''}
+            </div>
+            <div class="text-sm text-gray mt-4">${c.cat} · ${c.paraQuem} · vence todo dia ${c.diaVenc} · ${fmt(c.valorEstimado)}</div>
+            <div class="mt-8 flex gap-8" style="justify-content:flex-end">
+              ${c.venc?.bucket !== 'pago' ? `<button class="btn btn-success btn-sm" onclick="Pages.marcarContaFixaPaga(${c._row},'${c.desc.replace(/'/g,"\\'")}',${c.valorEstimado},'${c.cat}','${c.paraQuem}','${c.forma}')">Marcar paga</button>` : ''}
+              <button class="btn btn-ghost btn-sm" onclick="Pages.editarContaFixa(${c._row})">Editar</button>
+              <button class="btn btn-ghost btn-sm" onclick="Pages.deletarLancamento('${CONFIG.SHEETS.CONTAS_FIXAS}',${c._row})">Excluir</button>
+            </div>
+          </div>
+        </div>
+      `).join('') : '<div class="empty-state"><p>Nenhuma conta fixa cadastrada ainda</p></div>'}
+      <button class="btn-fab" onclick="Pages.openNovaContaFixa()">
+        <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+      </button>
+    `;
+  }
+
+  function editarContaFixa(row) {
+    const item = _contasFixasCache?.find(c => c._row === row);
+    if (item) openNovaContaFixa(item);
+  }
+
+  function openNovaContaFixa(preencher = null) {
+    const isEdit = !!preencher;
+    const p = preencher || {};
+    openModal(isEdit ? 'Editar Conta Fixa' : 'Nova Conta Fixa', `
+      <div class="form-group"><label class="form-label">Descrição</label>
+        <input class="form-control" type="text" id="cf-desc" placeholder="ex: Conta de Água" value="${p.desc||''}"></div>
+      <div class="form-row form-row-2">
+        <div class="form-group"><label class="form-label">Categoria</label>
+          <select class="form-control" id="cf-cat">${selectOptions(CONFIG.CAT_DESPESA, p.cat)}</select></div>
+        <div class="form-group"><label class="form-label">Valor Estimado (R$)</label>
+          <input class="form-control" type="number" id="cf-valor" step="0.01" placeholder="0,00" value="${p.valorEstimado||''}"></div>
+      </div>
+      <div class="form-row form-row-2">
+        <div class="form-group"><label class="form-label">Dia do Vencimento</label>
+          <input class="form-control" type="number" id="cf-dia" min="1" max="31" placeholder="ex: 10" value="${p.diaVenc||''}"></div>
+        <div class="form-group"><label class="form-label">Para quem</label>
+          <select class="form-control" id="cf-para">${selectOptions(CONFIG.MEMBROS, p.paraQuem || 'Família (geral)')}</select></div>
+      </div>
+      <div class="form-group"><label class="form-label">Forma de Pagamento</label>
+        <select class="form-control" id="cf-forma">${selectOptions(CONFIG.FORMAS_PGTO, p.forma)}</select></div>
+    `, [
+      { label: isEdit ? 'Salvar Alterações' : 'Salvar', cls:'btn-primary', action: async () => {
+        const desc = document.getElementById('cf-desc').value.trim();
+        const cat = document.getElementById('cf-cat').value;
+        const valor = parseFloat(document.getElementById('cf-valor').value) || 0;
+        const dia = parseInt(document.getElementById('cf-dia').value) || 0;
+        const paraQuem = document.getElementById('cf-para').value;
+        const forma = document.getElementById('cf-forma').value;
+        if (!desc || !valor || !dia || dia < 1 || dia > 31) return toast('Preencha descrição, valor estimado e um dia de vencimento válido (1-31)', 'error');
+        if (isEdit) {
+          await Sheets.update(CONFIG.SHEETS.CONTAS_FIXAS, `B${p._row}:G${p._row}`, [[desc, cat, valor, dia, paraQuem, forma]]);
+          toast('Conta fixa atualizada!', 'success');
+        } else {
+          await Sheets.append(CONFIG.SHEETS.CONTAS_FIXAS, [[genId(), desc, cat, valor, dia, paraQuem, forma, '', 'Sim', '']]);
+          toast('Conta fixa cadastrada!', 'success');
+        }
+        closeModal();
+        renderContasFixas(document.getElementById('page-contasfixas'));
+      }}
+    ]);
+  }
+
+  // Marca como paga ESTE ciclo e já lança a despesa correspondente — evita
+  // ter que registrar a mesma conta duas vezes (aqui + em Despesas).
+  function marcarContaFixaPaga(row, desc, valorEstimado, cat, paraQuem, forma) {
+    openModal(`Marcar paga: ${desc}`, `
+      <p class="text-sm mb-12" style="line-height:1.5">Confirma o pagamento? Isso já lança automaticamente em Despesas.</p>
+      <div class="form-group"><label class="form-label">Valor pago (R$)</label>
+        <input class="form-control" type="number" id="cf-pag-valor" step="0.01" value="${valorEstimado}"></div>
+      <div class="form-row form-row-2">
+        <div class="form-group"><label class="form-label">Data do pagamento</label>
+          <input class="form-control" type="date" id="cf-pag-data" value="${todayISO()}"></div>
+        <div class="form-group"><label class="form-label">Conta</label>
+          <select class="form-control" id="cf-pag-conta">${selectOptions(CONFIG.CONTAS, 'Conta Corrente')}</select></div>
+      </div>
+    `, [
+      { label: 'Confirmar pagamento', cls: 'btn-success', action: async () => {
+        const valorPago = parseFloat(document.getElementById('cf-pag-valor').value);
+        const dataPag = document.getElementById('cf-pag-data').value;
+        const conta = document.getElementById('cf-pag-conta').value;
+        // isNaN em vez de "!valorPago" — valor pago R$ 0,00 é legítimo
+        // (ex: conta totalmente isenta/creditada no mês) e não pode ser
+        // tratado como "campo vazio".
+        if (isNaN(valorPago) || valorPago < 0 || !dataPag) return toast('Preencha valor e data', 'error');
+        try {
+          const lancadoPor = App.getUserName();
+          await Promise.all([
+            Sheets.update(CONFIG.SHEETS.CONTAS_FIXAS, `H${row}`, [[dataPag]]),
+            Sheets.append(CONFIG.SHEETS.DESPESAS, [[genId(), dataPag, desc, cat, paraQuem, conta, forma, valorPago, lancadoPor]]),
+          ]);
+          toast('Pagamento registrado e lançado em Despesas!', 'success');
+          closeModal();
+          renderContasFixas(document.getElementById('page-contasfixas'));
+          if (document.getElementById('page-painel').classList.contains('active'))
+            renderPainel(document.getElementById('page-painel'));
+        } catch(e) { toast('Erro ao registrar', 'error'); console.error(e); }
+      }}
+    ]);
+  }
+
   // ─── METAS ────────────────────────────────────────────
   async function renderMetas(el) {
     el.innerHTML = '<div class="skeleton skel-row"></div>'.repeat(5);
     try {
-      const [metRows, divRows] = await Promise.all([
+      const [metRows, divRows, desRows] = await Promise.all([
         Sheets.readAll(CONFIG.SHEETS.METAS),
         Sheets.readAll(CONFIG.SHEETS.DIVIDAS),
+        Sheets.readAll(CONFIG.SHEETS.DESEJOS),
       ]);
       const metas   = Sheets.parseMetas(metRows);
       const dividas = Sheets.parseDividas(divRows);
+      const desejos = Sheets.parseDesejos(desRows).sort((a,b) => a.dataCadastro.localeCompare(b.dataCadastro));
+      _desejosCache = desejos;
 
       // ── Cálculo dívidas ───────────────────────────────
       const dividasAtivas = dividas.filter(d => d.nParc > 0 && d.pagas < d.nParc);
@@ -1250,12 +1457,14 @@ const Pages = (() => {
               ${parcelasAtivas.map(d => {
                 const saldoDevedor = d.total - d.parcela * d.pagas;
                 const pct = d.nParc > 0 ? d.pagas / d.nParc : 0;
+                const venc = (d.pagamentoMensal && d.proximoVencimento) ? Financas.calcVencimentoDivida(d.proximoVencimento) : null;
                 return `<div class="divida-meta-item">
                   <div class="dmi-header">
                     <div class="dmi-nome">${d.desc}</div>
                     <div class="dmi-saldo text-red">${fmt(saldoDevedor)}</div>
                   </div>
                   <div class="dmi-sub">${d.resp} · ${d.pagas}/${d.nParc} parcelas · vence ${d.dataFimStr}</div>
+                  ${venc ? `<div class="text-xs mt-4" style="font-weight:600;color:var(${venc.cor})">⏰ ${venc.frase}</div>` : ''}
                   <div class="progress-bar mt-4">
                     <div class="progress-fill" style="width:${(pct*100).toFixed(0)}%;background:var(--green)"></div>
                   </div>
@@ -1310,7 +1519,7 @@ const Pages = (() => {
                   </div>
                   ${metaReserva.obs ? `<div class="text-xs text-gray mt-4">${metaReserva.obs}</div>` : ''}
                   <div class="mt-8 flex gap-8" style="justify-content:flex-end">
-                    <button class="btn btn-ghost btn-sm" onclick="Pages.openAtualizarMeta(${metaReserva._row},'${metaReserva.nome}',${metaReserva.guardado})">Atualizar valor</button>
+                    <button class="btn btn-ghost btn-sm" onclick="Pages.openEditarMeta(${metaReserva._row},'${metaReserva.nome}',${metaReserva.meta},${metaReserva.guardado},${metaReserva.aporte})">Editar</button>
                   </div>
                 </div>`;
               })()}
@@ -1369,12 +1578,57 @@ const Pages = (() => {
                   </div>
                   ${m.obs ? `<div class="text-xs text-gray mt-4">${m.obs}</div>` : ''}
                   <div class="mt-8 flex gap-8" style="justify-content:flex-end">
-                    <button class="btn btn-ghost btn-sm" onclick="Pages.openAtualizarMeta(${m._row},'${m.nome}',${m.guardado})">Atualizar valor</button>
+                    <button class="btn btn-ghost btn-sm" onclick="Pages.openEditarMeta(${m._row},'${m.nome}',${m.meta},${m.guardado},${m.aporte})">Editar</button>
                     <button class="btn btn-ghost btn-sm" onclick="Pages.deletarLancamento('${CONFIG.SHEETS.METAS}',${m._row})">Excluir</button>
                   </div>
                 </div>`;
               }).join('') : `
                 <div class="empty-state"><p>Nenhuma meta ainda. Crie a primeira!</p></div>
+              `}
+            `}
+          </div>
+        </div>
+
+        <!-- ════ NÍVEL 4: LISTA DE DESEJOS ════ -->
+        <div class="nivel-wrap ${!n2ok ? 'nivel-bloqueado' : 'nivel-ativo'}">
+          <div class="nivel-header">
+            <div class="nivel-badge ${!n2ok ? 'badge-bloqueado' : 'badge-ativo'}">
+              ${!n2ok ? '🔒' : '🛋️'} Nível 4
+            </div>
+            <div class="nivel-titulo">Lista de Desejos</div>
+            <div class="nivel-status ${!n2ok ? 'text-gray' : 'text-green'}">
+              ${!n2ok ? 'BLOQUEADO' : `${desejos.length}/3`}
+            </div>
+          </div>
+          <div class="nivel-body">
+            ${!n2ok ? `
+              <div class="nivel-bloqueado-msg">
+                🔒 Mesma condição que já libera o Nível 3: dívidas quitadas e reserva de emergência completa. Não exige nenhuma meta do Nível 3 concluída, só a base.
+              </div>
+            ` : `
+              <p class="nivel-desc">Até 3 itens que você quer comprar (não precisa, quer). Cada item cadastrado passa pelos 3 filtros de decisão antes de entrar na lista — e só libera pra decisão final depois de 24h de reflexão.</p>
+              <div class="flex justify-between items-center mb-12">
+                <span class="text-sm text-gray">${desejos.length}/3 itens</span>
+                <button class="btn btn-primary btn-sm" onclick="Pages.openNovoDesejo()">+ Novo Desejo</button>
+              </div>
+              ${desejos.length ? desejos.map(d => {
+                const liberado = d.liberadoEm && new Date(d.liberadoEm).getTime() <= Date.now();
+                const horaLibera = d.liberadoEm ? new Date(d.liberadoEm).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+                return `<div class="meta-card">
+                  <div class="meta-header">
+                    <div class="meta-name">${d.item}</div>
+                    <div class="meta-pct">${fmt(d.valorEstimado)}</div>
+                  </div>
+                  <div class="text-xs ${liberado ? 'text-green' : 'text-gray'} mt-4">
+                    ${liberado ? '✅ Liberado pra decisão consciente' : `🕒 Aguardando reflexão — libera em ${horaLibera}`}
+                  </div>
+                  ${d.obs ? `<div class="text-xs text-gray mt-4">${d.obs}</div>` : ''}
+                  <div class="mt-8 flex gap-8" style="justify-content:flex-end">
+                    <button class="btn btn-ghost btn-sm" onclick="Pages.deletarDesejo(${d._row})">Excluir</button>
+                  </div>
+                </div>`;
+              }).join('') : `
+                <div class="empty-state"><p>Nenhum desejo cadastrado ainda.</p></div>
               `}
             `}
           </div>
@@ -1441,18 +1695,132 @@ const Pages = (() => {
     ]);
   }
 
-  function openAtualizarMeta(row, nome, guardadoAtual) {
-    openModal(`Atualizar: ${nome}`, `
-      <div class="form-group"><label class="form-label">Valor Guardado Atual (R$)</label>
-        <input class="form-control" type="number" id="meta-upd-guardado" step="0.01" value="${guardadoAtual}" placeholder="0,00"></div>
+  // Edita a meta inteira (valor-alvo, guardado e aporte mensal) — antes só
+  // dava pra atualizar o valor guardado; se a renda muda, o Joelson precisa
+  // poder ajustar o alvo (ex: da Reserva de Emergência) também.
+  function openEditarMeta(row, nome, meta, guardado, aporte) {
+    openModal(`Editar: ${nome}`, `
+      <div class="form-row form-row-2">
+        <div class="form-group"><label class="form-label">Valor da Meta (R$)</label>
+          <input class="form-control" type="number" id="meta-upd-meta" step="0.01" value="${meta}" placeholder="0,00"></div>
+        <div class="form-group"><label class="form-label">Já Guardado (R$)</label>
+          <input class="form-control" type="number" id="meta-upd-guardado" step="0.01" value="${guardado}" placeholder="0,00"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Aporte Mensal (R$)</label>
+        <input class="form-control" type="number" id="meta-upd-aporte" step="0.01" value="${aporte}" placeholder="0,00"></div>
     `, [
       { label:'Salvar', cls:'btn-success', action: async () => {
-        const v = parseFloat(document.getElementById('meta-upd-guardado').value) || 0;
-        await Sheets.update(CONFIG.SHEETS.METAS, `C${row}`, [[v]]);
+        const novaMeta = parseFloat(document.getElementById('meta-upd-meta').value) || 0;
+        const guard    = parseFloat(document.getElementById('meta-upd-guardado').value) || 0;
+        const aporteV  = parseFloat(document.getElementById('meta-upd-aporte').value) || 0;
+        if (!novaMeta) return toast('Informe o valor da meta', 'error');
+        await Sheets.update(CONFIG.SHEETS.METAS, `B${row}:D${row}`, [[novaMeta, guard, aporteV]]);
         toast('Meta atualizada!', 'success'); closeModal();
         renderMetas(document.getElementById('page-metas'));
       }}
     ]);
+  }
+
+  // ─── NÍVEL 4: LISTA DE DESEJOS ─────────────────────────
+  // Fluxo: form (item+valor) → Filtro 1 (bloqueante) → Filtro 2 (reflexivo)
+  // → Filtro 3 (regra das 24h, salva no final). Cada etapa é um openModal
+  // encadeado — o app não tem componente de wizard, então a "próxima tela"
+  // é só a função seguinte chamada no botão de ação.
+  function openNovoDesejo() {
+    openModal('Novo Desejo (Nível 4)', `
+      <div class="nivel-filosofia" style="margin-bottom:16px">
+        <div class="nf-icon">🛋️</div>
+        <div class="nf-sub">Antes de entrar na lista, esse item passa pelos 3 filtros de decisão consciente.</div>
+      </div>
+      <div class="form-group"><label class="form-label">O que você quer comprar?</label>
+        <input class="form-control" type="text" id="des-item" placeholder="ex: Sofá novo"></div>
+      <div class="form-group"><label class="form-label">Valor Estimado (R$)</label>
+        <input class="form-control" type="number" id="des-valor" step="0.01" placeholder="0,00"></div>
+    `, [
+      { label: 'Avançar → Filtro 1', cls: 'btn-primary', action: async () => {
+        const item = document.getElementById('des-item').value.trim();
+        const valor = parseFloat(document.getElementById('des-valor').value) || 0;
+        if (!item || !valor) return toast('Preencha o item e o valor estimado', 'error');
+        closeModal();
+        _filtro1Desejo(item, valor);
+      }}
+    ]);
+  }
+
+  function _filtro1Desejo(item, valor) {
+    openModal('Filtro 1 de 3 · Eu tenho dinheiro?', `
+      <p class="text-sm" style="line-height:1.6">
+        Você consegue pagar <strong>${fmt(valor)}</strong> por "<strong>${item}</strong>" à vista, agora, sem comprometer o orçamento do mês?
+      </p>
+      <p class="text-xs text-gray mt-8" style="line-height:1.6">
+        <strong>Custo de oportunidade:</strong> tirar esse dinheiro da conta vai atrasar um objetivo maior, um investimento planejado ou a reserva de emergência?
+      </p>
+    `, [
+      { label: 'Não tenho', cls: 'btn-ghost', action: async () => {
+        closeModal();
+        toast('Decisão: não é a hora. A compra não acontece agora.', '');
+      }},
+      { label: 'Sim, à vista', cls: 'btn-primary', action: async () => {
+        closeModal();
+        _filtro2Desejo(item, valor);
+      }},
+    ]);
+  }
+
+  function _filtro2Desejo(item, valor) {
+    openModal('Filtro 2 de 3 · Eu preciso disso?', `
+      <p class="text-sm" style="line-height:1.6">
+        <strong>Necessidade vs. desejo:</strong> ficar sem "${item}" nos próximos 14 dias traria prejuízo real à sua rotina ou ao trabalho?
+      </p>
+      <p class="text-sm mt-8" style="line-height:1.6">
+        <strong>Frequência de uso:</strong> esse item vai ser usado com regularidade, ou vai passar a maior parte do tempo guardado?
+      </p>
+    `, [
+      { label: 'Continuar → Filtro 3', cls: 'btn-primary', action: async () => {
+        closeModal();
+        _filtro3Desejo(item, valor);
+      }},
+    ]);
+  }
+
+  function _filtro3Desejo(item, valor) {
+    openModal('Filtro 3 de 3 · A Regra das 24 Horas', `
+      <p class="text-sm" style="line-height:1.6">
+        Você consegue fechar essa ideia e esperar até amanhã? Se depois de 24h a vontade de comprar "${item}" continuar e as respostas dos filtros anteriores forem sólidas, deixa de ser impulso e vira escolha consciente.
+      </p>
+      <p class="text-xs text-gray mt-8" style="line-height:1.6">
+        O item entra na lista agora, mas só fica marcado como "liberado pra decisão consciente" daqui a 24 horas.
+      </p>
+    `, [
+      { label: 'Registrar e aguardar 24h', cls: 'btn-success', action: async () => { await _salvarDesejo(item, valor); }},
+    ]);
+  }
+
+  async function _salvarDesejo(item, valor) {
+    try {
+      const rows = await Sheets.readAll(CONFIG.SHEETS.DESEJOS);
+      const atuais = Sheets.parseDesejos(rows).sort((a,b) => a.dataCadastro.localeCompare(b.dataCadastro));
+      // Máx. 3 itens — ao adicionar um 4º, remove o mais antigo primeiro.
+      if (atuais.length >= 3) {
+        await Sheets.deleteRow(CONFIG.SHEETS.DESEJOS, atuais[0]._row - 1);
+      }
+      const agora = new Date();
+      const liberaEm = new Date(agora.getTime() + 24 * 60 * 60 * 1000);
+      await Sheets.append(CONFIG.SHEETS.DESEJOS, [[genId(), item, valor, agora.toISOString(), liberaEm.toISOString(), '']]);
+      toast('Desejo registrado! Libera pra decisão em 24h.', 'success');
+      closeModal();
+      renderMetas(document.getElementById('page-metas'));
+    } catch(e) { toast('Erro ao salvar', 'error'); console.error(e); }
+  }
+
+  function deletarDesejo(row) {
+    confirmModal('Excluir este item da lista de desejos?', async () => {
+      try {
+        await Sheets.deleteRow(CONFIG.SHEETS.DESEJOS, row - 1);
+        toast('Removido', 'success');
+        renderMetas(document.getElementById('page-metas'));
+      } catch(e) { toast('Erro ao excluir', 'error'); console.error(e); }
+    });
   }
 
   // ─── DELETE genérico ──────────────────────────────────
@@ -2286,12 +2654,14 @@ const Pages = (() => {
 
   return {
     renderPainel, renderSaude, renderContas, renderReceitas, renderDespesas,
-    renderOrcamento, renderCartao, renderDividas, renderMetas,
+    renderOrcamento, renderCartao, renderDividas, renderMetas, renderContasFixas,
+    openNovaContaFixa, editarContaFixa, marcarContaFixaPaga,
     renderRelatorio, openExportarRelatorio, _relChangePeriod,
     openNovaReceita, openNovaDespesa, openNovaDivida, openNovaMeta,
-    openNovaMetaReserva, openEditarContas, openEditarOrcamento, openAtualizarMeta,
+    openNovaMetaReserva, openEditarContas, openEditarOrcamento, openEditarMeta,
+    openNovoDesejo, deletarDesejo,
     registrarPagamentoDivida, deletarLancamento, openModal, closeModal, toast,
-    _toggleParcelado, _calcImpactoParc, _calcImpactoDivida, editarCartao,
+    _toggleParcelado, _calcImpactoParc, _calcImpactoDivida, _toggleVencimento, editarCartao,
     editarReceita, _recChangePeriodo, _recSetFiltro, _recSetBusca, _recToggleSort, _recDataSugestao,
     editarDespesa, _despChangePeriodo, _despSetFiltro, _despSetBusca, _despToggleSort, _despDataSugestao,
     editarDivida, _divSetFiltro,
