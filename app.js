@@ -332,6 +332,12 @@ const App = (() => {
     document.getElementById('btn-logout').addEventListener('click', logout);
     document.getElementById('btn-logout-mobile')?.addEventListener('click', logout);
 
+    // Toque pra expandir nomes truncados com "..." (categorias, descrições)
+    document.body.addEventListener('click', (e) => {
+      const el = e.target.closest('.tx-desc, .orc-cat, .donut-leg-cat');
+      if (el) el.classList.toggle('expanded');
+    });
+
     // Botão voltar Android
     initBackButton();
 

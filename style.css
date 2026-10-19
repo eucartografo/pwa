@@ -285,7 +285,10 @@ tfoot td { padding: 10px 12px; font-weight: 700; background: var(--gray-50); col
 .tx-icon.income { background: var(--green-lt); color: var(--green); }
 .tx-icon.expense { background: var(--red-lt); color: var(--red); }
 .tx-info { flex: 1; min-width: 0; }
-.tx-desc { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tx-desc { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.tx-desc.expanded, .orc-cat.expanded, .donut-leg-cat.expanded {
+  white-space: normal; overflow: visible; text-overflow: clip; word-break: break-word;
+}
 .tx-meta { font-size: 12px; color: var(--gray-500); }
 .tx-amount { font-size: 15px; font-weight: 700; flex-shrink: 0; }
 .tx-amount.income { color: var(--green); }
@@ -374,7 +377,7 @@ tfoot td { padding: 10px 12px; font-weight: 700; background: var(--gray-50); col
 /* Orçamento category rows */
 .orc-row { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
 .orc-row:last-child { border-bottom: none; }
-.orc-cat { flex: 1; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orc-cat { flex: 1; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .orc-vals { display: flex; gap: 12px; font-size: 13px; text-align: right; }
 .orc-meta { color: var(--gray-500); min-width: 72px; }
 .orc-real { font-weight: 600; min-width: 72px; }
@@ -433,7 +436,7 @@ tfoot td { padding: 10px 12px; font-weight: 700; background: var(--gray-50); col
 .donut-legend { display: flex; flex-direction: column; gap: 6px; }
 .donut-leg-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .donut-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-.donut-leg-cat { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.donut-leg-cat { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .donut-leg-val { font-weight: 600; min-width: 68px; text-align: right; }
 .donut-leg-pct { color: var(--gray-500); min-width: 36px; text-align: right; font-size: 11px; }
 .donut-leg-delta { min-width: 42px; text-align: right; font-size: 11px; font-weight: 600; }

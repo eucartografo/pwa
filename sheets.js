@@ -176,35 +176,39 @@ const Sheets = (() => {
       addSheet: { properties: { title: s.name } }
     }));
     const url = `${BASE}/${CONFIG.SPREADSHEET_ID}:batchUpdate`;
-    await fetch(url, {
+    const r = await fetch(url, {
       method: 'POST', headers: headers(),
       body: JSON.stringify({ requests })
     });
+    if (!r.ok) console.warn(`createAllSheets: addSheet batchUpdate falhou (${r.status}) — abas podem já existir`);
 
     // Popula cabeçalhos e dados iniciais em cada aba
     for (const s of sheetDefs) {
       await update(s.name, 'A1', [s.headers]);
     }
 
-    // Dados iniciais: CONTAS
+    // Dados iniciais: só popula se a aba ainda estiver vazia (evita duplicar
+    // dados-semente caso createAllSheets() seja chamado mais de uma vez).
+    async function _seedSeVazia(sheetName, dataRows) {
+      const existente = await read(sheetName, 'A2:A2');
+      if (!existente.length) await append(sheetName, dataRows);
+    }
+
     const contasData = CONFIG.CONTAS.map(c => {
       const resp = c.includes('Joelson') ? 'Joelson' : c.includes('Raquel') ? 'Raquel' : 'Família (geral)';
       return [c, resp, 0];
     });
-    await append(CONFIG.SHEETS.CONTAS, contasData);
+    await _seedSeVazia(CONFIG.SHEETS.CONTAS, contasData);
 
-    // Dados iniciais: ORÇAMENTO
     const orcData = CONFIG.CAT_DESPESA.map(c => [c, 0]);
-    await append(CONFIG.SHEETS.ORCAMENTO, orcData);
+    await _seedSeVazia(CONFIG.SHEETS.ORCAMENTO, orcData);
 
-    // Dados iniciais: CARTÃO
-    await append(CONFIG.SHEETS.CARTAO, [
+    await _seedSeVazia(CONFIG.SHEETS.CARTAO, [
       ['Cartão Joelson', 'Joelson', 3000, 10],
       ['Cartão Raquel',  'Raquel',  2000, 5],
     ]);
 
-    // Dados iniciais: METAS
-    await append(CONFIG.SHEETS.METAS, [
+    await _seedSeVazia(CONFIG.SHEETS.METAS, [
       ['Reserva de Emergência (6 meses)',  21000, 0, 350, 'Manter na conta Reserva de Emergência'],
       ['Poupança Educação - Davi',         15000, 0, 100, 'Faculdade/curso futuro'],
       ['Poupança Educação - Luísa',        15000, 0, 100, 'Faculdade/curso futuro'],
