@@ -1000,19 +1000,28 @@ const Pages = (() => {
       const rows = await Sheets.readAll(CONFIG.SHEETS.DIVIDAS);
       _divCache = Sheets.parseDividas(rows);
       if (!el.dataset.filtro) el.dataset.filtro = 'Todos';
+      // Dívidas quitadas ficam só um clique de distância (filtro "Todas"/
+      // "Quitadas"), nunca excluídas — perder o histórico de quando/quanto
+      // foi pago não vale o ganho de uma tela mais limpa.
+      if (!el.dataset.filtroStatus) el.dataset.filtroStatus = 'Ativas';
       _renderDividasList(el);
     } catch(e) { el.innerHTML = erro(e); console.error(e); }
   }
 
   function _renderDividasList(el) {
     const filtro = el.dataset.filtro || 'Todos';
-    const dividas = filtro === 'Todos' ? _divCache : _divCache.filter(d => d.resp === filtro);
+    const filtroStatus = el.dataset.filtroStatus || 'Ativas';
+    let dividas = filtro === 'Todos' ? _divCache : _divCache.filter(d => d.resp === filtro);
+    if (filtroStatus === 'Ativas') dividas = dividas.filter(d => d.pagas < d.nParc);
+    else if (filtroStatus === 'Quitadas') dividas = dividas.filter(d => d.pagas >= d.nParc);
     const totalDevedor  = dividas.reduce((s,d) => s + (d.total - d.parcela * d.pagas), 0);
     const totalParcelas = dividas.reduce((s,d) => s + d.parcela, 0);
     const filtroOpts = ['Todos','Joelson','Raquel','Família (geral)'].map(m => `<option value="${m}" ${m===filtro?'selected':''}>${m}</option>`).join('');
+    const statusOpts = ['Ativas','Todas','Quitadas'].map(s => `<option value="${s}" ${s===filtroStatus?'selected':''}>${s}</option>`).join('');
 
     el.innerHTML = `
       <div class="toolbar">
+        <select class="form-control toolbar-filter" onchange="Pages._divSetFiltroStatus(this)">${statusOpts}</select>
         <select class="form-control toolbar-filter" onchange="Pages._divSetFiltro(this)">${filtroOpts}</select>
       </div>
       <div class="kpi-grid" style="grid-template-columns:1fr 1fr">
@@ -1020,7 +1029,7 @@ const Pages = (() => {
         <div class="kpi-card kpi-orange"><div class="kpi-label">Parcelas/Mês</div><div class="kpi-value">${fmt(totalParcelas)}</div></div>
       </div>
       <div class="flex justify-between items-center mb-12 mt-16">
-        <p class="section-title" style="margin:0">Dívidas em Andamento</p>
+        <p class="section-title" style="margin:0">${filtroStatus === 'Quitadas' ? 'Dívidas Quitadas' : filtroStatus === 'Todas' ? 'Todas as Dívidas' : 'Dívidas em Andamento'}</p>
         <button class="btn btn-primary btn-sm" onclick="Pages.openNovaDivida()">+ Nova</button>
       </div>
       ${dividas.length ? dividas.map(d => {
@@ -1046,7 +1055,7 @@ const Pages = (() => {
             </div>
           </div>
         </div>`;
-      }).join('') : '<div class="empty-state"><p>Nenhuma dívida cadastrada 🎉</p></div>'}
+      }).join('') : `<div class="empty-state"><p>${filtroStatus === 'Quitadas' ? 'Nenhuma dívida quitada ainda' : 'Nenhuma dívida cadastrada 🎉'}</p></div>`}
 
       <button class="btn-fab" onclick="Pages.openNovaDivida()">
         <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
@@ -1057,6 +1066,11 @@ const Pages = (() => {
   function _divSetFiltro(sel) {
     const el = document.getElementById('page-dividas');
     el.dataset.filtro = sel.value;
+    _renderDividasList(el);
+  }
+  function _divSetFiltroStatus(sel) {
+    const el = document.getElementById('page-dividas');
+    el.dataset.filtroStatus = sel.value;
     _renderDividasList(el);
   }
   function editarDivida(row) {
@@ -2664,6 +2678,6 @@ const Pages = (() => {
     _toggleParcelado, _calcImpactoParc, _calcImpactoDivida, _toggleVencimento, editarCartao,
     editarReceita, _recChangePeriodo, _recSetFiltro, _recSetBusca, _recToggleSort, _recDataSugestao,
     editarDespesa, _despChangePeriodo, _despSetFiltro, _despSetBusca, _despToggleSort, _despDataSugestao,
-    editarDivida, _divSetFiltro,
+    editarDivida, _divSetFiltro, _divSetFiltroStatus,
   };
 })();
